@@ -1,0 +1,38 @@
+#+TITLE: mutate
+
+* Mutating syntax
+To mutate syntax, you need to use =make-expr-mutator= or =make-program-mutator= from =mutate-expr.rkt= or =mutate-program.rkt= to create functions that do the mutation.
+
+Each of these functions build a mutating function out of a =mutator=.
+A =mutator= (see =mutator/c= in =mutator-lib.rkt=) is a function that performs mutation using the =mutated= API.
+Basically, it's a function that takes three arguments:
+1. a piece of syntax
+2. a mutation index
+3. a counter
+and it should return a =mutated?= (defined in =mutated.rkt=, along with several primitive operations and forms for working with =mutated?= objects).
+Any changes to the syntax that it does must happen through =maybe-mutate=, and there are a few utilities to help write and compose mutators along with that in =mutator-lib.rkt=. =mutate-util.rkt= also provides a few other utilities for implementing mutators.
+
+It's best to define mutators using the =define-mutator= macros.
+Simple rearrangement or swapping mutators defined with =define-id-mutator=, =define-value-mutator=, and =define-simple-mutator= do not even need to use the =mutated= API.
+
+Mutators can be combined to build more complex mutators with =compose-mutators=.
+
+Mutators can also signal to other mutators and =mutate-expr= that a part of their result syntax should not be mutated any further by using =mutation-guard=.
+One tricky point about =mutation-guard=:
+If you want a piece of syntax to be guarded whether a mutation is applied or not, you should use =mutation-guard= *outside* of any =maybe-mutate='s, so that even if the mutation doesn't end up being applied the syntax gets guarded.
+
+=mutate-expr= works as follows:
+- If the syntax isn't guarded, it applies the mutator to the syntax
+- If the resulting syntax isn't guarded, and it's a syntax-list, it splits it up and recurs on all subparts
+
+=make-expr-mutator= and =make-program-mutator= also take optional filtering functions to select which kinds of expressions should be mutated.
+For =make-program-mutator=, these filters have a specific API shown in =top-level-selectors.rkt=.
+
+=mutate-program= is meant to be the usual entrypoint to mutating syntax.
+
+* Creating a mutation engine
+See the already-defined mutators in =mutators.rkt=.
+The tools in =mutator-lib.rkt= are also available to make writing new mutators easier.
+
+Then, combine all of the mutations (mutators) that you want using =compose-mutators=, and create an expression mutator and then a program mutator.
+
