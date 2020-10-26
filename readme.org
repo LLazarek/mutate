@@ -243,6 +243,7 @@ A few useful expression selectors are provided in =expression-selectors.rkt=, in
 ** mutate-program.rkt
 This module provides tools for applying mutators across a whole program.
 It serves a similar purpose to [[*mutate-expr.rkt][mutate-expr.rkt]] in walking the program to apply mutators and offering filtering of what gets mutated, but it additionally provides the feature of returning which top level definition in the program is mutated.
+Additionally, a program mutator signals that no mutation with the given id could be found by raising an exception recognizable by =mutation-index-exception?=.
 
 *** make-program-mutator
 #+BEGIN_SRC racket
