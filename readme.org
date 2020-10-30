@@ -229,11 +229,11 @@ Example:
 > (define if-swap* (make-expr-mutator if-swap))
 > (if-swap* #'(if cond t e) 0 0)
 (mutated #'(if cond e t) 1)
-> (if-swap #'(if (if 0 1 2) 'y 'n) 0 0) ; now recurs on subparts to find inner if
+> (if-swap* #'(if (if 0 1 2) 'y 'n) 0 0) ; now recurs on subparts to find inner if
 (mutated #'(if (if 0 1 2) 'n 'y) 1)
-> (if-swap #'(if (if 0 1 2) 'y 'n) 1 0) ; now recurs on subparts to find inner if
+> (if-swap* #'(if (if 0 1 2) 'y 'n) 1 0) ; now recurs on subparts to find inner if
 (mutated #'(if (if 0 2 1) 'y 'n) 2)
-> (if-swap #'(add1 (if 0 1 2)) 0 0) ; now recurs on subparts to find inner if
+> (if-swap* #'(add1 (if 0 1 2)) 0 0) ; now recurs on subparts to find inner if
 (mutated #'(add1 (if 0 2 1)) 1)
 #+END_SRC
 
