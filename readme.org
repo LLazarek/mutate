@@ -89,7 +89,7 @@ Example:
 
 **** Value mutators
 #+BEGIN_SRC racket
-(define-value-mutator name #:type type-expr #:bind-value value-id [pattern #:-> replacement] ...)
+(define-value-mutator (name value-id) #:type type-expr [pattern #:-> replacement] ...)
 #+END_SRC
 
 Defines a mutator that swaps literal values using patterns as in =match=.
@@ -97,7 +97,7 @@ The mutator tries every pattern in order, like match, but every pattern that mat
 
 Example:
 #+BEGIN_SRC racket
-> (define-value-mutator number-swap #:type "number-swap" #:bind-value v
+> (define-value-mutator (number-swap v) #:type "number-swap"
     [1            #:-> 0]
     [(? integer?) #:-> (- v)]
     [(? float?)   #:-> (truncate v)])

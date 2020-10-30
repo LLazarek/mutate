@@ -169,9 +169,8 @@
                   mutation-index
                   counter))
 
-(define-simple-macro (define-value-mutator name:id
+(define-simple-macro (define-value-mutator (name:id value-name:id)
                        #:type type:expr
-                       #:bind-value value-name:id
                        [pat:expr #:-> replacement:expr] ...)
   (define-mutator (name maybe-atom-stx mutation-index counter) #:type [the-type type]
     (define mutation-sequence
@@ -286,9 +285,8 @@
 
   (test-begin
     #:name value-mutator
-    (ignore (define-value-mutator mutate-value
+    (ignore (define-value-mutator (mutate-value value)
               #:type "test"
-              #:bind-value value
               [(? number?) #:-> (- value)]
               [(? number?) #:-> 0]
               [(? integer?) #:-> (exact->inexact value)]
