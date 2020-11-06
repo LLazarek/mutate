@@ -1,6 +1,7 @@
 #lang at-exp racket/base
 
-(require racket/contract)
+(require racket/contract
+         racket/bool)
 
 (provide (contract-out
           [compound-expr? (syntax? . -> . boolean?)]
@@ -14,7 +15,13 @@
                              mutation-index?
                              counter?
                              . -> .
-                             (mutated/c (listof syntax?)))]))
+                             (mutated/c (listof syntax?)))]
+          [mutate-with-generator (syntax?
+                                  (syntax? counter? . -> . (or/c syntax? #f))
+                                  mutation-index?
+                                  counter?
+                                  . -> .
+                                  (mutated/c syntax?))]))
 
 (require racket/list
          racket/match
@@ -38,6 +45,38 @@
                                mutation-index
                                __))
          [return (cons element stxs-so-far)])))
+
+;; stx?
+;; (stx? index? . -> . (or/c stx? #f))
+;; index?
+;; index?
+;; ->
+;; mutated?
+(define (mutate-with-generator stx next-mutation mutation-index counter)
+  ;; One might think we could take a shortcut here by just calling
+  ;; `(next-mutation stx (- mutation-index counter))`
+  ;; This doesn't work because some change in between there might
+  ;; produce a syntactically equivalent mutant!
+  (let loop ([mutated-so-far (no-mutation stx mutation-index counter)]
+             [i 0])
+    (cond [(> (mutated-new-counter mutated-so-far) mutation-index)
+           mutated-so-far]
+          [else
+           (define next
+             (mdo [count-with (__ #f)]
+                  (def stx-so-far mutated-so-far)
+                  (def/value new-stx (next-mutation stx-so-far i))
+                  (def swapped (maybe-mutate stx-so-far
+                                             new-stx
+                                             mutation-index
+                                             __))
+                  [return (if (false? new-stx)
+                              #f
+                              swapped)]))
+           (if (false? (mutated-stx next))
+               mutated-so-far
+               (loop next
+                     (add1 i)))])))
 
 (module+ test
   (require racket
@@ -76,7 +115,59 @@
        [2 (,#'#t
            ,#''a
            ,#'1
-           ,#'(+ 1 2))]))))
+           ,#'(+ 1 2))])))
+  (test-begin
+    #:name mutate-with-generator
+    (ignore
+     (define (choose-permutation stx i)
+       (define l (syntax->list stx))
+       (define perms (permutations l))
+       (and (< i (length perms))
+            (datum->syntax stx (list-ref perms i))))
+     (define mutate-from-permutations
+       (λ (stx mutation-index counter)
+         (mutate-with-generator stx
+                                choose-permutation
+                                mutation-index
+                                counter))))
+    (test-mutator*
+     mutate-from-permutations
+     #'(a b c)
+     (list #'(b a c)
+           #'(a c b)
+           #'(c a b)
+           #'(b c a)
+           #'(c b a)))
+    (ignore
+     (define mutate-from-empty
+       (λ (stx mutation-index counter)
+         (mutate-with-generator stx
+                                (λ _ #f)
+                                mutation-index
+                                counter))))
+    (test-mutator*
+     mutate-from-empty
+     #'(a b c)
+     (list))
+    (ignore
+     (define mutate-with-a-bigger-number
+       (λ (stx mutation-index counter)
+         (mutate-with-generator stx
+                                (λ (stx i) (datum->syntax stx (+ i (syntax->datum stx))))
+                                mutation-index
+                                counter))))
+    (test-mutator*
+     mutate-with-a-bigger-number
+     #'0
+     (list #'1
+           #'2
+           #'3
+           #'4
+           #'5
+           #'6
+           #'7
+           #'8
+           #| ... |#))))
 
 (define (rearrange-in-seq args-stxs mutation-index counter)
   (define-values (pairs remainder) (pair-off args-stxs))
