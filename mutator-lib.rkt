@@ -48,6 +48,9 @@
                                  (any/c . -> . any/c)
                                  . -> .
                                  mutator/c)]
+          [make-stream-mutator ((syntax? counter? . -> . (or/c syntax? #f))
+                                . -> .
+                                mutator/c)]
           ;; Composes the given mutators into one which applies each of the
           ;; mutators *in the given order*
           [compose-mutators (mutator/c mutator/c ... . -> . mutator/c)]
@@ -62,7 +65,8 @@
          define-dependent-mutator
          define-simple-mutator)
 
-(require racket/dict
+(require racket/bool
+         racket/dict
          racket/format
          racket/match
          syntax/parse
@@ -221,6 +225,38 @@
                  counter)))
   the-mutator)
 
+;; (stx? index? . -> . (or/c stx? #f))
+;; ->
+;; mutated?
+(define (make-stream-mutator next-mutation #:type [type "<stream-mutator>"])
+  ;; One might think we could take a shortcut here by just calling
+  ;; `(next-mutation stx (- mutation-index counter))`
+  ;; This doesn't work because some change in between there might
+  ;; produce a syntactically equivalent mutant!
+  (define-mutator (the-mutator stx mutation-index counter) #:type [the-type type]
+    (log-mutation-type the-type)
+    (let loop ([mutated-so-far (no-mutation stx mutation-index counter)]
+               [i 0])
+      (cond [(> (mutated-new-counter mutated-so-far) mutation-index)
+             mutated-so-far]
+            [else
+             (define next
+               (mbind (λ (stx-so-far current-counter)
+                        (define maybe-new-stx (next-mutation stx-so-far i))
+                        (if (false? maybe-new-stx)
+                            (no-mutation #f mutation-index current-counter)
+                            (maybe-mutate stx-so-far
+                                          maybe-new-stx
+                                          mutation-index
+                                          current-counter)))
+                      mutated-so-far))
+             (if (false? (mutated-stx next))
+                 mutated-so-far
+                 (loop next
+                       (add1 i)))])))
+  the-mutator)
+
+
 ;; See note about limitation of simple mutators above `make-guarded-mutator`
 (define-simple-macro (define-simple-mutator (name:id stx-name:id)
                        {~optional {~seq #:type type}
@@ -228,14 +264,17 @@
                        #:pattern pattern
                        {~optional {~seq #:when guard}}
                        body ...)
-  (define-mutator (name stx-name mutation-index counter) #:type [the-type type]
-    (syntax-parse stx-name
-      [pattern
-       {~? {~@ #:when guard}}
-       (log-mutation-type the-type)
-       (define new-stx (let () body ...))
-       (maybe-mutate stx-name new-stx mutation-index counter)]
-      [else (no-mutation stx-name mutation-index counter)])))
+  (define-stream-mutator name
+    #:type type
+    #:pattern pattern
+    {? {~@ #:when guard}}
+    (λ (stx-name i)
+      (cond [(zero? i) #f]
+            [else
+             (define new (let () body ...))
+             (if (syntax? new)
+                 (maybe-mutate stx-name new mutation-index counter)
+                 new)]))))
 
 (define-mutator (no-mutation v mutation-index counter) #:type [_ "<no-mutation>"]
   (mutated v counter))
@@ -326,4 +365,47 @@
                    (list #'surprise!
                          #'surprise-2!
                          #'(+ 42 3)
-                         #'(+ x 3)))))
+                         #'(+ x 3))))
+
+  (test-begin
+    #:name make-stream-mutator
+    (ignore
+     (define (choose-permutation stx i)
+       (define l (syntax->list stx))
+       (define perms (permutations l))
+       (and (< i (length perms))
+            (datum->syntax stx (list-ref perms i))))
+     (define mutate-from-permutations
+       (make-stream-mutator choose-permutation)))
+    (test-mutator*
+     mutate-from-permutations
+     #'(a b c)
+     (list #'(b a c)
+           #'(a c b)
+           #'(c a b)
+           #'(b c a)
+           #'(c b a)
+           #'(a b c)
+           #'(a b c)))
+    (ignore
+     (define mutate-from-empty
+       (make-stream-mutator (λ _ #f))))
+    (test-mutator*
+     mutate-from-empty
+     #'(a b c)
+     (list #'(a b c)))
+    (ignore
+     (define mutate-with-a-bigger-number
+       (make-stream-mutator (λ (stx i) (datum->syntax stx (+ i (syntax->datum stx)))))))
+    (test-mutator*
+     mutate-with-a-bigger-number
+     #'0
+     (list #'1
+           #'2
+           #'3
+           #'4
+           #'5
+           #'6
+           #'7
+           #'8
+           #| ... |#))))
