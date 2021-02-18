@@ -7,9 +7,10 @@
 
 (define-simple-mutator (if-swap stx)
   #:pattern ({~literal if} cond t e)
+  #:when (list? (syntax->datum #'cond))
   #'(if cond e t))
 
-(define-value-mutator constant-swap #:type "constant-swap" #:bind-value v
+(define-value-mutator (constant-swap v) #:type "constant-swap"
   [(? number?) #:-> (- v)])
 
 (define active-mutators (list if-swap

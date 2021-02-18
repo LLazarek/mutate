@@ -264,17 +264,16 @@
                        #:pattern pattern
                        {~optional {~seq #:when guard}}
                        body ...)
-  (define-stream-mutator name
-    #:type type
-    #:pattern pattern
-    {? {~@ #:when guard}}
-    (λ (stx-name i)
-      (cond [(zero? i) #f]
-            [else
-             (define new (let () body ...))
-             (if (syntax? new)
-                 (maybe-mutate stx-name new mutation-index counter)
-                 new)]))))
+  (define name
+    (make-stream-mutator (λ (stx-name i)
+                           (cond [(zero? i)
+                                  (syntax-parse stx-name
+                                    [pattern
+                                     {~? {~@ #:when guard}}
+                                     body ...]
+                                    [_ #f])]
+                                 [else #f]))
+                         #:type type)))
 
 (define-mutator (no-mutation v mutation-index counter) #:type [_ "<no-mutation>"]
   (mutated v counter))

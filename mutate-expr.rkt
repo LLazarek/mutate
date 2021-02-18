@@ -123,9 +123,8 @@
                    x
                    x)))
 
-  (define-value-mutator replace-any-datum-with-0
+  (define-value-mutator (replace-any-datum-with-0 value)
     #:type "test"
-    #:bind-value value
     [(not (? list?)) #:-> 0])
   (test-begin
     #:name make-expr-mutator
