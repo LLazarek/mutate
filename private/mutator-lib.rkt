@@ -14,7 +14,7 @@
 (define (dependent-mutator/c . arg/cs)
   (struct/c dependent-mutator
             (dynamic->* #:mandatory-domain-contracts arg/cs
-                        #:range-contracts mutator-function/c)
+                        #:range-contracts (list mutator-function/c))
             mutator-type?))
 
 (provide (contract-out
@@ -60,7 +60,7 @@
          (struct-out dependent-mutator)
 
          define-id-mutator
-         define-value-mutator
+         define-constant-mutator
          define-mutator
          define-dependent-mutator
          define-simple-mutator)
@@ -173,7 +173,7 @@
                   mutation-index
                   counter))
 
-(define-simple-macro (define-value-mutator (name:id value-name:id)
+(define-simple-macro (define-constant-mutator (name:id value-name:id)
                        #:type type:expr
                        [pat:expr #:-> replacement:expr] ...)
   (define-mutator (name maybe-atom-stx mutation-index counter) #:type [the-type type]
@@ -323,7 +323,7 @@
 
   (test-begin
     #:name value-mutator
-    (ignore (define-value-mutator (mutate-value value)
+    (ignore (define-constant-mutator (mutate-value value)
               #:type "test"
               [(? number?) #:-> (- value)]
               [(? number?) #:-> 0]

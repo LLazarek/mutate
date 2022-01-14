@@ -34,13 +34,9 @@
          racket/string
          syntax/parse
          syntax/id-set
-         "logger.rkt"
-         "mutate-expr.rkt"
-         "mutate-util.rkt"
-         "mutated.rkt"
-         "mutator-lib.rkt"
-         "../util/program.rkt"
-         "../util/path-utils.rkt")
+         "../main.rkt"
+         "../primitives.rkt"
+         "../util.rkt")
 
 (define-id-mutator arithmetic-op-swap
   #:type "arithmetic-op-swap"
@@ -75,9 +71,8 @@
   #:type "nested-list-construction-swap"
   [append #:-> cons])
 
-(define-value-mutator replace-constants
+(define-constant-mutator (replace-constants value)
   #:type "constant-swap"
-  #:bind-value value
   ;; May mess with occurrence typing
   [(? boolean?)              #:-> (not value)]
 
@@ -100,7 +95,7 @@
 (module+ test
   (require ruinit
            racket
-           "mutate-test-common.rkt")
+           "../testing-util.rkt")
   (define mutate-datum (compose-mutators arithmetic-op-swap
                                          boolean-op-swap
                                          class-method-publicity-swap
@@ -778,6 +773,15 @@
         <
         #:key get-key))
 
+;; Below mutators assume a representation of a programs and modules like:
+(struct program (main others))
+(struct mod (path stx))
+;; program? . -> . (listof mod?)
+(define (program->mods p)
+  (cons (program-main p)
+        (program-others p)))
+(define program/c program?)
+
 ; stx? program/c -> mutator/c
 (define-dependent-mutator (make-imported-id-swap-mutator mod-top-level-forms-stx containing-program)
   #:type [type "imported-id-swap"]
@@ -843,7 +847,16 @@
       {~not _:require-form} ...}
      (syntax->datum #'[{~? spec.relative-require-mod-path} ... ...])]])
 
+
 (define (program-mod-with-name mod-name a-program)
+  (define (file-name-string-from-path f)
+    (define-values {_1 name _2} (split-path f))
+    (path->string name))
+
+  (define ((path-ends-with name) p)
+    (define p-name (file-name-string-from-path p))
+    (string=? p-name name))
+
   (findf (compose1 (path-ends-with mod-name) mod-path)
          (program->mods a-program)))
 

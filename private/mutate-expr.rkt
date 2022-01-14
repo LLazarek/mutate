@@ -34,27 +34,27 @@
                 (select? stx))
       [(list selected-stx reconstruct-original-stx parameters-to-set)
        (define (mutate-it)
-         (mdo (count-with [__ counter])
-              (def outer-level-mutated-stx
-                (mutator selected-stx mutation-index __))
-              (def result
-                (cond
-                  [(and (compound-expr? outer-level-mutated-stx)
-                        (not (mutation-guarded? outer-level-mutated-stx)))
-                   (mdo* (def inner-parts-mutated-stx-split
-                           (mutate-in-seq (syntax->list outer-level-mutated-stx)
-                                          mutation-index
-                                          __
-                                          mutate-expr))
-                         [return
-                          (datum->syntax stx
-                                         inner-parts-mutated-stx-split
-                                         stx
-                                         stx)])]
-                  [else (no-mutation outer-level-mutated-stx
-                                     mutation-index
-                                     __)]))
-              [return (reconstruct-original-stx result)]))
+         (mutated-do
+          #:count-with [__ counter]
+          [outer-level-mutated-stx (mutator selected-stx mutation-index __)]
+          [result
+           (cond
+             [(and (compound-expr? outer-level-mutated-stx)
+                   (not (mutation-guarded? outer-level-mutated-stx)))
+              (mutated-do-single
+               [inner-parts-mutated-stx-split
+                (mutate-in-seq (syntax->list outer-level-mutated-stx)
+                               mutation-index
+                               __
+                               mutate-expr)]
+               #:return (datum->syntax stx
+                                       inner-parts-mutated-stx-split
+                                       stx
+                                       stx))]
+             [else (no-mutation outer-level-mutated-stx
+                                mutation-index
+                                __)])]
+          #:return (reconstruct-original-stx result)))
        (call-with-parameterization* parameters-to-set
                                     mutate-it)]
       [#f
@@ -123,7 +123,7 @@
                    x
                    x)))
 
-  (define-value-mutator (replace-any-datum-with-0 value)
+  (define-constant-mutator (replace-any-datum-with-0 value)
     #:type "test"
     [(not (? list?)) #:-> 0])
   (test-begin
@@ -201,12 +201,12 @@
         (λ (stx mutation-index counter)
           (syntax-parse stx
             [(head . rest)
-             (mdo* (def mutated-head (maybe-mutate #'head
-                                                   #'0
-                                                   mutation-index
-                                                   counter))
-                   [return
-                    (mutation-guard #`(#,mutated-head . rest))])]
+             (mutated-do-single
+              [mutated-head (maybe-mutate #'head
+                                          #'0
+                                          mutation-index
+                                          counter)]
+              #:return (mutation-guard #`(#,mutated-head . rest)))]
             [other
              (no-mutation stx mutation-index counter)])))))
     (test-mutator* replace-head-of-exprs-with-0-and-prevent-recur

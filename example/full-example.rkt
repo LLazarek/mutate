@@ -1,16 +1,14 @@
 #lang racket
 
-(require "mutator-lib.rkt"
-         "mutate-expr.rkt"
-         "mutate-program.rkt"
-         syntax/parse)
+(require syntax/parse
+         "../main.rkt")
 
 (define-simple-mutator (if-swap stx)
   #:pattern ({~literal if} cond t e)
   #:when (list? (syntax->datum #'cond))
   #'(if cond e t))
 
-(define-value-mutator (constant-swap v) #:type "constant-swap"
+(define-constant-mutator (constant-swap v) #:type "constant-swap"
   [(? number?) #:-> (- v)])
 
 (define active-mutators (list if-swap
@@ -38,3 +36,5 @@
 ;; (2 ((require a.rkt) (define x (if (yes?) 0 42)) (define y (if (negative? x) (if (zero? x) zero! positive!) negative!)) (displayln y)))
 ;; (3 ((require a.rkt) (define x (if (yes?) 0 42)) (define y (if (negative? x) negative! (if (zero? x) positive! zero!))) (displayln y)))
 ;; done!
+
+(module test racket)

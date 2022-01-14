@@ -323,3 +323,16 @@ The same code is also in =full-example.rkt=.
 ;; (3 ((require a.rkt) (define x (if (yes?) 0 42)) (define y (if (negative? x) negative! (if (zero? x) positive! zero!))) (displayln y)))
 ;; done!
 #+END_SRC
+
+* todo
+
+** DONE Split things into a neat private / public interface
+
+** DONE Change mdo and friends to use keywords
+
+** DONE Rename `-value-mutator` to `-constant-mutator`
+
+** TODO Turn readme into docs
+
+** TODO Add a program mutator wrapper that handles `(module ...)` forms directly
+

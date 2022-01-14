@@ -50,39 +50,37 @@
            #:do [(define-values {body-stxs top-level-id reconstruct-e}
                    (select #'top-level-e))]
            #:when body-stxs
-           (mdo [count-with (__ counter)]
-                (def body-stxs/mutated
-                  (mutate-in-seq body-stxs
-                                 mutation-index
-                                 __
-                                 mutate-expr))
-                (def/value body-stxs-mutated?
-                  (mutation-applied-already? mutation-index __))
-                ;; move on to the rest of the program, if necessary
-                (def (mutated-program program-rest mutated-fn-in-rest)
-                  (mutate-program-rest (syntax/loc stx (e ...))
-                                       mutation-index
-                                       __))
-                [return
-                 (mutated-program
-                  (quasisyntax/loc stx
-                    (#,(reconstruct-e body-stxs/mutated)
-                     #,@program-rest))
-                  (if body-stxs-mutated?
-                      top-level-id
-                      mutated-fn-in-rest))])]
+           (mutated-do
+            #:count-with [__ counter]
+            [body-stxs/mutated (mutate-in-seq body-stxs
+                                              mutation-index
+                                              __
+                                              mutate-expr)]
+            #:let [body-stxs-mutated? (mutation-applied-already? mutation-index __)]
+            ;; move on to the rest of the program, if necessary
+            [(mutated-program program-rest mutated-fn-in-rest)
+             (mutate-program-rest (syntax/loc stx (e ...))
+                                  mutation-index
+                                  __)]
+            #:return (mutated-program
+                      (quasisyntax/loc stx
+                        (#,(reconstruct-e body-stxs/mutated)
+                         #,@program-rest))
+                      (if body-stxs-mutated?
+                          top-level-id
+                          mutated-fn-in-rest)))]
 
           ;; Ignore anything else
           [(other-e e ...)
-           (mdo* (def (mutated-program rest-stxs mutated-fn-in-rest)
-                   (mutate-program-rest (syntax/loc stx (e ...))
-                                        mutation-index
-                                        counter))
-                 [return
-                  (mutated-program
-                   (quasisyntax/loc stx
-                     (other-e #,@rest-stxs))
-                   mutated-fn-in-rest)])]
+           (mutated-do-single
+            [(mutated-program rest-stxs mutated-fn-in-rest)
+             (mutate-program-rest (syntax/loc stx (e ...))
+                                  mutation-index
+                                  counter)]
+            #:return (mutated-program
+                      (quasisyntax/loc stx
+                        (other-e #,@rest-stxs))
+                      mutated-fn-in-rest))]
           [()
            ;; signal no more mutations in this module
            (raise (mutation-index-exception))])

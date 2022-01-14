@@ -20,8 +20,8 @@
                   (mutated/c A)
                   . -> .
                   boolean?)])
-         mdo
-         mdo*
+         mutated-do
+         mutated-do-single
          (struct-out mutated))
 
 (require (for-syntax syntax/parse
@@ -55,30 +55,30 @@
 
 ;; Performs sequential mutations with automatic threading of the
 ;; counter
-(define-syntax (mdo stx)
+(define-syntax (mutated-do stx)
   (syntax-parse stx
     #:datum-literals (count-with def return in def/value)
-    [(_ [count-with (counter-id:id current-value:expr)]
-        (def bound-id:expr m-expr:expr)
+    [(_ #:count-with [counter-id:id current-value:expr]
+        [bound-id:expr m-expr:expr]
         more-clauses ...+)
      #'(match-let* ([counter-id current-value]
                     [(mutated bound-id counter-id) m-expr])
-         (mdo [count-with (counter-id counter-id)]
-              more-clauses ...))]
-    [(_ [count-with (counter-id:id current-value:expr)]
-        (def/value bound-id:expr non-m-expr:expr)
+         (mutated-do #:count-with [counter-id counter-id]
+                     more-clauses ...))]
+    [(_ #:count-with [counter-id:id current-value:expr]
+        #:let [bound-id:expr non-m-expr:expr]
         more-clauses ...+)
      #'(match-let* ([bound-id non-m-expr])
-         (mdo [count-with (counter-id current-value)]
-              more-clauses ...))]
+         (mutated-do #:count-with [counter-id current-value]
+                     more-clauses ...))]
     ;; return <=> mmap
-    [(_ [count-with (counter-id:id current-value:expr)]
-        [return m-expr:expr])
+    [(_ #:count-with [counter-id:id current-value:expr]
+        #:return m-expr:expr)
      #'(mutated m-expr
                 counter-id)]
     ;; in <=> mbind
-    [(_ [count-with (counter-id:id current-value:expr)]
-        [in m-expr:expr])
+    [(_ #:count-with [counter-id:id current-value:expr]
+        #:in m-expr:expr)
      #'m-expr]))
 
 ;; bind version that shows more clearly how this is similar to monadic do
@@ -104,7 +104,7 @@
         [in m-expr:expr])
      #'m-expr]))
 
-(define-syntax-rule (mdo* def-clause result-clause)
-  (mdo [count-with (unused #f)]
-       def-clause
-       result-clause))
+(define-syntax-rule (mutated-do-single def-clause #:return result-clause)
+  (mutated-do #:count-with [unused #f]
+              def-clause
+              #:return result-clause))

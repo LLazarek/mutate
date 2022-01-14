@@ -32,12 +32,13 @@
   (for/fold ([mutated-so-far (mutated '() counter)]
              #:result (mmap reverse mutated-so-far))
             ([stx (in-list stxs)])
-    (mdo [count-with (__ #f)]
-         (def stxs-so-far mutated-so-far)
-         (def element (mutator stx
-                               mutation-index
-                               __))
-         [return (cons element stxs-so-far)])))
+    (mutated-do
+     #:count-with [__ #f]
+     [stxs-so-far mutated-so-far]
+     [element (mutator stx
+                       mutation-index
+                       __)]
+     #:return (cons element stxs-so-far))))
 
 (module+ test
   (require racket
@@ -80,11 +81,12 @@
 
 (define (rearrange-in-seq args-stxs mutation-index counter)
   (define-values (pairs remainder) (pair-off args-stxs))
-  (mdo* (def pairs/swapped (mutate-in-seq pairs
-                                          mutation-index
-                                          counter
-                                          rearrange-pair))
-        [return (unpair-off pairs/swapped remainder)]))
+  (mutated-do-single
+   [pairs/swapped (mutate-in-seq pairs
+                                 mutation-index
+                                 counter
+                                 rearrange-pair)]
+   #:return (unpair-off pairs/swapped remainder)))
 
 (define/contract (rearrange-pair args mutation-index counter)
   ((list/c syntax? syntax?) mutation-index? counter? . -> . (mutated/c syntax?))
