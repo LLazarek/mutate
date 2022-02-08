@@ -99,9 +99,9 @@
 ;; If `old` is equivalent to `new`, the mutation will not be considered. The
 ;; meaning of "equivalent" is determined by equivalence predicate given to
 ;; `#:equivalent?`. In most cases, `old` and `new` are syntax, and "equivalent"
-;; means syntactically identical (`exprs-equal?`).
+;; means syntactically identical (`stx-equal?`).
 (define (maybe-mutate old new mutation-index counter
-                      #:equivalent? [equivalent? exprs-equal?])
+                      #:equivalent? [equivalent? stx-equal?])
   (define should-apply-mutation?
     (and (= mutation-index counter)
          (not (equivalent? old new))))
@@ -118,9 +118,14 @@
        ;; considered.
        (add1 counter))))
 
-(define (exprs-equal? a b)
-  (equal? (syntax->datum a)
-          (syntax->datum b)))
+;; Copied from TR internals somewhere
+(define (stx-equal? s1 s2)
+  (cond [(and (identifier? s1) (identifier? s2))
+         (free-identifier=? s1 s2)]
+        [else
+         (if (and (syntax? s1) (syntax? s2))
+             (equal?/recur (syntax-e s1) (syntax-e s2) stx-equal?)
+             (equal?/recur s1 s2 stx-equal?))]))
 
 
 
