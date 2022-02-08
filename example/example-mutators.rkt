@@ -219,27 +219,27 @@
             {~or* begin
                   {~seq {~or* λ lambda} formals}}}
       es ...+ e-result)
-     (mdo* (def mutated-es (delete-result-expr (syntax/loc stx [es ... e-result])
-                                               mutation-index
-                                               counter))
-           [return (quasisyntax/loc stx
-                     (head ... #,@mutated-es))])]
+     (mutated-do-single [mutated-es (delete-result-expr (syntax/loc stx [es ... e-result])
+                                                        mutation-index
+                                                        counter)]
+                        #:return (quasisyntax/loc stx
+                                   (head ... #,@mutated-es)))]
     [(begin0 e-result es ...+)
-     (mdo* (def mutated-es (delete-result-expr (quasisyntax/loc stx
-                                                 [#,@(reverse (attribute es)) e-result])
-                                               mutation-index
-                                               counter))
-           [return (quasisyntax/loc stx
-                     (begin0 #,@(reverse (syntax->list mutated-es))))])]
+     (mutated-do-single [mutated-es (delete-result-expr (quasisyntax/loc stx
+                                                          [#,@(reverse (attribute es)) e-result])
+                                                        mutation-index
+                                                        counter)]
+                        #:return (quasisyntax/loc stx
+                                   (begin0 #,@(reverse (syntax->list mutated-es)))))]
     [(cond [test e ...] ...)
-     (mdo* (def mutated-case-bodies (mutate-in-seq (syntax->list #'[[e ...] ...])
-                                                   mutation-index
-                                                   counter
-                                                   delete-result-expr))
-           [return (syntax-parse mutated-case-bodies
-                     [[[mutated-e ...] ...]
-                      (syntax/loc stx
-                        (cond [test mutated-e ...] ...))])])]
+     (mutated-do-single [mutated-case-bodies (mutate-in-seq (syntax->list #'[[e ...] ...])
+                                                            mutation-index
+                                                            counter
+                                                            delete-result-expr)]
+                        #:return (syntax-parse mutated-case-bodies
+                                   [[[mutated-e ...] ...]
+                                    (syntax/loc stx
+                                      (cond [test mutated-e ...] ...))]))]
     [else
      (no-mutation stx mutation-index counter)]))
 
@@ -274,25 +274,23 @@
       #:datum-literals [cond if]
       [(cond [test . body] ...)
        (define test-stxs (attribute test))
-       (mdo* (def mutated-test-stxs (mutate-in-seq test-stxs
-                                                   mutation-index
-                                                   counter
-                                                   mutate-condition))
-             [return
-              (syntax-parse mutated-test-stxs
-                [[mutated-test ...]
-                 (syntax/loc stx
-                   (cond [mutated-test . body] ...))])])]
+       (mutated-do-single [mutated-test-stxs (mutate-in-seq test-stxs
+                                                            mutation-index
+                                                            counter
+                                                            mutate-condition)]
+                          #:return (syntax-parse mutated-test-stxs
+                                     [[mutated-test ...]
+                                      (syntax/loc stx
+                                        (cond [mutated-test . body] ...))]))]
       [(if test then-e else-e)
        (define cond-form #'(cond [test then-e] [else else-e]))
-       (mdo* (def mutated-cond-form (m cond-form
-                                       mutation-index
-                                       counter))
-             [return
-              (syntax-parse mutated-cond-form
-                [(cond [mutated-test _] _)
-                 (syntax/loc stx
-                   (if mutated-test then-e else-e))])])]
+       (mutated-do-single [mutated-cond-form (m cond-form
+                                                mutation-index
+                                                counter)]
+                          #:return (syntax-parse mutated-cond-form
+                                     [(cond [mutated-test _] _)
+                                      (syntax/loc stx
+                                        (if mutated-test then-e else-e))]))]
       [else
        (no-mutation stx mutation-index counter)]))
   m)
@@ -432,18 +430,17 @@
           ({~and {~datum class*} class-form} superclass:expr
                                              interfaces:expr . body))
      (define superclass-stx (attribute superclass))
-     (mdo* (def mutated-superclass (maybe-mutate superclass-stx
-                                                 (datum->syntax superclass-stx
-                                                                'object%
-                                                                superclass-stx
-                                                                superclass-stx)
-                                                 mutation-index
-                                                 counter))
-           [return
-            (quasisyntax/loc stx
-              (class-form #,mutated-superclass
-                          {~? interfaces}
-                          . body))])]
+     (mutated-do-single [mutated-superclass (maybe-mutate superclass-stx
+                                                          (datum->syntax superclass-stx
+                                                                         'object%
+                                                                         superclass-stx
+                                                                         superclass-stx)
+                                                          mutation-index
+                                                          counter)]
+                        #:return (quasisyntax/loc stx
+                                   (class-form #,mutated-superclass
+                                               {~? interfaces}
+                                               . body)))]
     [else
      (no-mutation stx mutation-index counter)]))
 
@@ -474,33 +471,35 @@
       [field-id:id other-field-stuff ... initial-value:expr]
       ...)
      (define init-value-stxs (attribute initial-value))
-     (mdo* (def rearranged-init-value-stxs
-             (rearrange-in-seq init-value-stxs
-                               mutation-index
-                               counter))
-           [return
-            (syntax-parse rearranged-init-value-stxs
-              [[new-init-value ...]
-               (quasisyntax/loc stx
-                 (field-type no-init-field ...
-                             [field-id other-field-stuff ... new-init-value] ...))])])]
+     (mutated-do-single [rearranged-init-value-stxs
+                         (rearrange-in-seq init-value-stxs
+                                           mutation-index
+                                           counter)]
+                        #:return (syntax-parse rearranged-init-value-stxs
+                                   [[new-init-value ...]
+                                    (quasisyntax/loc stx
+                                      (field-type no-init-field ...
+                                                  [field-id
+                                                   other-field-stuff ...
+                                                   new-init-value] ...))]))]
     [({~and {~or {~datum new} {~datum instantiate}} instantiator}
       class-e
       {~and positional-initializer {~not (_ ...)}} ...
       [field-id:id other-field-stuff ... initial-value:expr]
       ...)
      (define init-value-stxs (attribute initial-value))
-     (mdo* (def rearranged-init-value-stxs
-             (rearrange-in-seq init-value-stxs
-                               mutation-index
-                               counter))
-           [return
-            (syntax-parse rearranged-init-value-stxs
-              [[new-init-value ...]
-               (quasisyntax/loc stx
-                 (instantiator class-e
-                      positional-initializer ...
-                      [field-id other-field-stuff ... new-init-value] ...))])])]
+     (mutated-do-single [rearranged-init-value-stxs
+                         (rearrange-in-seq init-value-stxs
+                                           mutation-index
+                                           counter)]
+                        #:return (syntax-parse rearranged-init-value-stxs
+                                   [[new-init-value ...]
+                                    (quasisyntax/loc stx
+                                      (instantiator class-e
+                                                    positional-initializer ...
+                                                    [field-id
+                                                     other-field-stuff ...
+                                                     new-init-value] ...))]))]
     [else
      (no-mutation stx mutation-index counter)]))
 
@@ -562,12 +561,11 @@
   (syntax-parse stx
     [({~and head {~not _:special-form}} e ...)
      (define e-stxs (attribute e))
-     (mdo* (def rearranged-e-stxs (rearrange-in-seq e-stxs
-                                                    mutation-index
-                                                    counter))
-           [return
-            (quasisyntax/loc stx
-              (head #,@rearranged-e-stxs))])]
+     (mutated-do-single [rearranged-e-stxs (rearrange-in-seq e-stxs
+                                                             mutation-index
+                                                             counter)]
+                        #:return (quasisyntax/loc stx
+                                   (head #,@rearranged-e-stxs)))]
     [else
      (no-mutation stx mutation-index counter)]))
 (define-syntax-class special-form
@@ -623,18 +621,17 @@
     [(~or ({~and {~datum class}  class-form} superclass:expr . body)
           ({~and {~datum class*} class-form} superclass:expr
                                              interfaces:expr . body))
-     (mdo* (def extra-method-stx
-             (maybe-mutate (syntax/loc stx [])
-                           (syntax/loc stx
-                             [(define/public (a-nonexistant-method x) x)])
-                           mutation-index
-                           counter))
-           [return
-            (quasisyntax/loc stx
-              (class-form superclass
-                          {~? interfaces}
-                          #,@extra-method-stx
-                          . body))])]
+     (mutated-do-single [extra-method-stx
+                         (maybe-mutate (syntax/loc stx [])
+                                       (syntax/loc stx
+                                         [(define/public (a-nonexistant-method x) x)])
+                                       mutation-index
+                                       counter)]
+                        #:return (quasisyntax/loc stx
+                                   (class-form superclass
+                                               {~? interfaces}
+                                               #,@extra-method-stx
+                                               . body)))]
     [else
      (no-mutation stx mutation-index counter)]))
 
