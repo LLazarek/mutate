@@ -138,7 +138,8 @@
 
 
 (define-simple-macro (define-id-mutator name:id
-                       #:type type:expr
+                       {~optional {~seq #:type type}
+                                  #:defaults ([type #'(~a 'name)])}
                        {~alt [orig:id #:->  new:id]
                              [left:id #:<-> right:id]} ...)
   #:with [left-right-pair ...] #'[{~@ (left . right) (right . left)} ...]
@@ -179,7 +180,8 @@
                   counter))
 
 (define-simple-macro (define-constant-mutator (name:id value-name:id)
-                       #:type type:expr
+                       {~optional {~seq #:type type}
+                                  #:defaults ([type #'(~a 'name)])}
                        [pat:expr #:-> replacement:expr] ...)
   (define-mutator (name maybe-atom-stx mutation-index counter) #:type [the-type type]
     (define mutation-sequence

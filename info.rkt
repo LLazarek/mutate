@@ -8,7 +8,7 @@
                      "syntax-sloc"))
 (define pkg-desc "Program mutation library")
 (define pkg-authors '(lukas))
-(define scribblings '(("scribblings/mutate.scrbl")))
+(define scribblings '(("scribblings/mutate.scrbl" ())))
 (define compile-omit-paths '("example"))
 (define test-omit-paths    '("example"))
 
