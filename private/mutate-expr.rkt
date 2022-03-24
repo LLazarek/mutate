@@ -43,10 +43,10 @@
                    (not (mutation-guarded? outer-level-mutated-stx)))
               (mutated-do-single
                [inner-parts-mutated-stx-split
-                (mutate-in-seq (syntax->list outer-level-mutated-stx)
-                               mutation-index
-                               __
-                               mutate-expr)]
+                (mutate-in-sequence (syntax->list outer-level-mutated-stx)
+                                    mutation-index
+                                    __
+                                    mutate-expr)]
                #:return (datum->syntax stx
                                        inner-parts-mutated-stx-split
                                        stx

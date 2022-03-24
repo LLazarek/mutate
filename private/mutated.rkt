@@ -75,7 +75,7 @@
     [(_ #:count-with [counter-id:id current-value:expr]
         #:return m-expr:expr)
      #'(mutated m-expr
-                counter-id)]
+                current-value)]
     ;; in <=> mbind
     [(_ #:count-with [counter-id:id current-value:expr]
         #:in m-expr:expr)

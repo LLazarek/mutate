@@ -2,15 +2,15 @@
 
 (require racket/contract)
 (provide (contract-out
-          [top-level-selector/c    contract?]
-          [select-all                          top-level-selector/c]
-          [select-define/contract              top-level-selector/c]
-          [select-any-define-named-form        top-level-selector/c]
+          [top-level-selector/c                     contract?]
+          [select-all                               top-level-selector/c]
+          [select-define/contract-body              top-level-selector/c]
+          [select-any-define-named-form-body        top-level-selector/c]
 
-          [select-define-body                  top-level-selector/c]
-          [select-type-annotations+define-body top-level-selector/c]
+          [select-define-body                       top-level-selector/c]
+          [select-type-annotations+define-body      top-level-selector/c]
 
-          [leftmost-identifier-in  (syntax? . -> . symbol?)]))
+          [leftmost-identifier-in                   (syntax? . -> . symbol?)]))
 
 (require racket/bool
          racket/format
@@ -37,9 +37,14 @@
     [else '<no-name-found>]))
 
 (define top-level-selector/c
+  ;; todo: simpler interface and more consistent with expression-selectors
+  #;(syntax? . -> . (or/c #f
+                        (list (listof syntax?)
+                              any/c
+                              ((listof syntax?) . -> . syntax?))))
   (->i ([stx syntax?])
        (values [parts-to-mutate (or/c #f (listof syntax?))]
-               [mutated-id (or/c #f symbol?)]
+               [mutated-id any/c]
                [reconstruct-stx (or/c #f ((listof syntax?) . -> . syntax?))])
        #:post/desc {parts-to-mutate mutated-id reconstruct-stx}
        (or (andmap false? (list parts-to-mutate
@@ -76,7 +81,7 @@
                            Mutated: @a-bigger-list
                            })]))]))
 
-(define (select-define/contract stx)
+(define (select-define/contract-body stx)
   (syntax-parse stx
     [def:contracted-definition
       (define-values {to-mutate id reconstructor}
@@ -92,7 +97,7 @@
               reconstruct-definition)]
     [_ (values #f #f #f)]))
 
-(define (select-any-define-named-form stx)
+(define (select-any-define-named-form-body stx)
   (syntax-parse stx
     [def:definition
       (define body-stxs (syntax->list (syntax/loc stx

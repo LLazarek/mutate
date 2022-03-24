@@ -4,17 +4,17 @@
 
 (provide (contract-out
           [compound-expr? (syntax? . -> . boolean?)]
-          [mutate-in-seq ((listof any/c)
-                          mutation-index?
-                          counter?
-                          mutator/c
-                          . -> .
-                          mutated?)]
-          [rearrange-in-seq ((listof syntax?)
-                             mutation-index?
-                             counter?
-                             . -> .
-                             (mutated/c (listof syntax?)))]))
+          [mutate-in-sequence ((listof any/c)
+                               mutation-index?
+                               counter?
+                               mutator/c
+                               . -> .
+                               mutated?)]
+          [rearrange-in-sequence ((listof syntax?)
+                                  mutation-index?
+                                  counter?
+                                  . -> .
+                                  (mutated/c (listof syntax?)))]))
 
 (require racket/list
          racket/match
@@ -27,8 +27,8 @@
     [(_ ...) #t]
     [datum   #f]))
 
-(define (mutate-in-seq stxs mutation-index counter
-                       mutator)
+(define (mutate-in-sequence stxs mutation-index counter
+                            mutator)
   (for/fold ([mutated-so-far (mutated '() counter)]
              #:result (mmap reverse mutated-so-far))
             ([stx (in-list stxs)])
@@ -46,13 +46,13 @@
            ruinit
            "mutate-test-common.rkt")
   (test-begin
-    #:name mutate-in-seq
+    #:name mutate-in-sequence
     (test-mutation/in-seq
      (list #'#t
            #''a
            #'1
            #'(+ 1 2))
-     mutate-in-seq
+     mutate-in-sequence
      (λ (stx mutation-index counter)
        (maybe-mutate stx
                      (syntax-parse stx
@@ -79,13 +79,13 @@
            ,#'1
            ,#'(+ 1 2))]))))
 
-(define (rearrange-in-seq args-stxs mutation-index counter)
+(define (rearrange-in-sequence args-stxs mutation-index counter)
   (define-values (pairs remainder) (pair-off args-stxs))
   (mutated-do-single
-   [pairs/swapped (mutate-in-seq pairs
-                                 mutation-index
-                                 counter
-                                 rearrange-pair)]
+   [pairs/swapped (mutate-in-sequence pairs
+                                      mutation-index
+                                      counter
+                                      rearrange-pair)]
    #:return (unpair-off pairs/swapped remainder)))
 
 (define/contract (rearrange-pair args mutation-index counter)
@@ -121,24 +121,24 @@
 
 (module+ test
   (test-begin
-    #:name rearrange-in-seq
+    #:name rearrange-in-sequence
     (test-programs-equal?
-     #`(#,@(mutated-stx (rearrange-in-seq
+     #`(#,@(mutated-stx (rearrange-in-sequence
                          (syntax->list #'(a (+ 1 2)))
                          0 0)))
      #'((+ 1 2) a))
     (test-programs-equal?
-     #`(#,@(mutated-stx (rearrange-in-seq
+     #`(#,@(mutated-stx (rearrange-in-sequence
                          (syntax->list #'(a (+ 1 2) b))
                          0 0)))
      #'((+ 1 2) a b))
     (test-programs-equal?
-     #`(#,@(mutated-stx (rearrange-in-seq
+     #`(#,@(mutated-stx (rearrange-in-sequence
                          (syntax->list #'(a (+ 1 2) b (foo 3)))
                          1 0)))
      #'(a (+ 1 2) (foo 3) b))
     (test-programs-equal?
-     #`(#,@(mutated-stx (rearrange-in-seq
+     #`(#,@(mutated-stx (rearrange-in-sequence
                          (syntax->list #'(a (+ 1 2) b (foo 3) (bar 3 4 5)))
                          2 0)))
      #'(a (+ 1 2) b (foo 3) (bar 3 4 5)))

@@ -44,12 +44,14 @@
                            mutated?)]
           ;; Mutator constructor
           ;; applies the mutation function if the guard is satisfied.
-          [make-guarded-mutator ((any/c . -> . boolean?)
-                                 (any/c . -> . any/c)
-                                 . -> .
+          [make-guarded-mutator ({(any/c . -> . boolean?)
+                                  (any/c . -> . any/c)}
+                                 {#:type string?}
+                                 . ->* .
                                  mutator/c)]
-          [make-stream-mutator ((syntax? counter? . -> . (or/c syntax? #f))
-                                . -> .
+          [make-stream-mutator ({(syntax? counter? . -> . (or/c syntax? #f))}
+                                {#:type string?}
+                                . ->* .
                                 mutator/c)]
           ;; Composes the given mutators into one which applies each of the
           ;; mutators *in the given order*
@@ -71,6 +73,7 @@
          racket/match
          syntax/parse
          syntax/parse/define
+         racket/list
          (for-syntax racket/base)
          "logger.rkt"
          "mutated.rkt")
@@ -220,7 +223,7 @@
 ;; mutator needs to guard any syntax from mutation, because the application of
 ;; `maybe-mutate` is out of your control, and guarding must be done outside of
 ;; that.
-(define (make-guarded-mutator should-apply? apply [type "<guarded-mutator>"])
+(define (make-guarded-mutator should-apply? apply #:type [type "<guarded-mutator>"])
   (define-mutator (the-mutator orig-v mutation-index counter) #:type [_ type]
     (if (and (<= counter mutation-index)
              (should-apply? orig-v))
@@ -263,6 +266,36 @@
                        (add1 i)))])))
   the-mutator)
 
+;; todo: much more efficient version of make-stream-mutator?
+#;(define (make-stream-mutator make-stream #:type [type "<stream-mutator>"])
+  ;; One might think we could take a shortcut here by just calling
+  ;; `(next-mutation stx (- mutation-index counter))`
+  ;; This doesn't work because some change in between there might
+  ;; produce a syntactically equivalent mutant!
+  (define-mutator (the-mutator stx mutation-index counter) #:type [the-type type]
+    (log-mutation-type the-type)
+    (define next-mutation (make-stream stx)) ;; todo: in fact couldn't make-stream actually return a racket stream?
+    (let loop ([mutated-so-far (no-mutation stx mutation-index counter)]
+               [i 0])
+      (cond [(> (mutated-new-counter mutated-so-far) mutation-index)
+             mutated-so-far]
+            [else
+             (define next
+               (mbind (λ (stx-so-far current-counter)
+                        (define maybe-new-stx (next-mutation i))
+                        (if (false? maybe-new-stx)
+                            (no-mutation #f mutation-index current-counter)
+                            (maybe-mutate stx-so-far
+                                          maybe-new-stx
+                                          mutation-index
+                                          current-counter)))
+                      mutated-so-far))
+             (if (false? (mutated-stx next))
+                 mutated-so-far
+                 (loop next
+                       (add1 i)))])))
+  the-mutator)
+
 
 ;; See note about limitation of simple mutators above `make-guarded-mutator`
 ;;
@@ -292,9 +325,13 @@
   (mutated v counter))
 
 (define (compose-mutators . mutators)
-  (λ (stx mutation-index counter)
-    ;; lltodo: this should handle 0 mutators by appending `no-mutation'
-    (apply-mutators stx mutators mutation-index counter)))
+  (if (empty? mutators)
+      no-mutation
+      (λ (stx mutation-index counter)
+        (apply-mutators stx
+                        mutators
+                        mutation-index
+                        counter))))
 
 (module+ test
   (require racket

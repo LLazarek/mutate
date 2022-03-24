@@ -52,10 +52,10 @@
            #:when body-stxs
            (mutated-do
             #:count-with [__ counter]
-            [body-stxs/mutated (mutate-in-seq body-stxs
-                                              mutation-index
-                                              __
-                                              mutate-expr)]
+            [body-stxs/mutated (mutate-in-sequence body-stxs
+                                                   mutation-index
+                                                   __
+                                                   mutate-expr)]
             #:let [body-stxs-mutated? (mutation-applied-already? mutation-index __)]
             ;; move on to the rest of the program, if necessary
             [(mutated-program program-rest mutated-fn-in-rest)

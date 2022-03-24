@@ -36,7 +36,7 @@
          syntax/id-set
          "../main.rkt"
          "../primitives.rkt"
-         "../util.rkt")
+         "../define.rkt")
 
 (define-id-mutator arithmetic-op-swap
   #:type "arithmetic-op-swap"
@@ -232,10 +232,10 @@
                         #:return (quasisyntax/loc stx
                                    (begin0 #,@(reverse (syntax->list mutated-es)))))]
     [(cond [test e ...] ...)
-     (mutated-do-single [mutated-case-bodies (mutate-in-seq (syntax->list #'[[e ...] ...])
-                                                            mutation-index
-                                                            counter
-                                                            delete-result-expr)]
+     (mutated-do-single [mutated-case-bodies (mutate-in-sequence (syntax->list #'[[e ...] ...])
+                                                                 mutation-index
+                                                                 counter
+                                                                 delete-result-expr)]
                         #:return (syntax-parse mutated-case-bodies
                                    [[[mutated-e ...] ...]
                                     (syntax/loc stx
@@ -274,10 +274,10 @@
       #:datum-literals [cond if]
       [(cond [test . body] ...)
        (define test-stxs (attribute test))
-       (mutated-do-single [mutated-test-stxs (mutate-in-seq test-stxs
-                                                            mutation-index
-                                                            counter
-                                                            mutate-condition)]
+       (mutated-do-single [mutated-test-stxs (mutate-in-sequence test-stxs
+                                                                 mutation-index
+                                                                 counter
+                                                                 mutate-condition)]
                           #:return (syntax-parse mutated-test-stxs
                                      [[mutated-test ...]
                                       (syntax/loc stx
@@ -296,10 +296,9 @@
   m)
 
 (define (mutation-guard-if condition mutated-v)
-  (mmap (if condition
-            identity
-            mutation-guard)
-        mutated-v))
+  (if condition
+      (mmap mutation-guard mutated-v)
+      mutated-v))
 
 (define (make-simple-condition-mutator condition-stx-transform
                                        type)
@@ -472,9 +471,9 @@
       ...)
      (define init-value-stxs (attribute initial-value))
      (mutated-do-single [rearranged-init-value-stxs
-                         (rearrange-in-seq init-value-stxs
-                                           mutation-index
-                                           counter)]
+                         (rearrange-in-sequence init-value-stxs
+                                                mutation-index
+                                                counter)]
                         #:return (syntax-parse rearranged-init-value-stxs
                                    [[new-init-value ...]
                                     (quasisyntax/loc stx
@@ -489,9 +488,9 @@
       ...)
      (define init-value-stxs (attribute initial-value))
      (mutated-do-single [rearranged-init-value-stxs
-                         (rearrange-in-seq init-value-stxs
-                                           mutation-index
-                                           counter)]
+                         (rearrange-in-sequence init-value-stxs
+                                                mutation-index
+                                                counter)]
                         #:return (syntax-parse rearranged-init-value-stxs
                                    [[new-init-value ...]
                                     (quasisyntax/loc stx
@@ -561,9 +560,9 @@
   (syntax-parse stx
     [({~and head {~not _:special-form}} e ...)
      (define e-stxs (attribute e))
-     (mutated-do-single [rearranged-e-stxs (rearrange-in-seq e-stxs
-                                                             mutation-index
-                                                             counter)]
+     (mutated-do-single [rearranged-e-stxs (rearrange-in-sequence e-stxs
+                                                                  mutation-index
+                                                                  counter)]
                         #:return (quasisyntax/loc stx
                                    (head #,@rearranged-e-stxs)))]
     [else
