@@ -46,7 +46,6 @@ Second, it provides a framework for applying mutators to whole programs.
 
 This documentation is structured according to these two pieces.
 
-@section{Mutators}
 @subsection[#:tag "concepts"]{Mutator concepts}
 This library centers around the concept of a @deftech{mutator}, which describes a small syntactic modification to a piece of syntax.
 A mutator can roughly be thought of as a function from syntax to syntax which does the modification.
@@ -89,7 +88,7 @@ The mutation index is the way to select a particular mutation point with this li
 
 Summing it all up so far, to mutate a program entails applying a mutator (or several) to a program along with a @tech{mutation index}, which selects which @tech{mutation point} to use.
 
-Internally, this library uses a counter (called a @deftech{mutation counter})to keep track of @tech{mutation point}s as it traverses a program.
+Internally, this library uses a counter (called a @deftech{mutation counter}) to keep track of @tech{mutation point}s as it traverses a program.
 Every mutator consumes a counter and produces an updated counter along with its possibly-mutated result syntax.
 The counter (along with the @tech{mutation index}) provides the mechanism to decide whether a particular @tech{mutation point} should be used or not:
 if a mutator is applied with a counter that is smaller than the mutation index, then that mutator's mutation point should be skipped and the counter incremented to record that a mutation point has been passed;
@@ -111,11 +110,17 @@ To alleviate the burden of keeping track of the @tech{mutation index} and @tech{
 
 
 @subsection[#:tag "big-picture-usage"]{Using mutators to mutate programs}
-LLTODO
+The perspective on mutation described in the previous section (and embodied in this library) lends itself to the following style of creating mutators.
 
-@deftech{simple mutator}
-@deftech{expression mutator}
-@deftech{program mutator}
+First, one defines @deftech{simple mutator}s, each of which succinctly describes a single mutation by only considering the outermost shape of a piece of syntax.
+In other words, simple mutators need only "do the right thing" when given directly a piece of syntax that they can mutate; they do not seek out (ie traverse to find) sub-parts of the syntax that could be mutated.
+
+With one or more simple mutators in hand, one combines them all together (with @racket[compose-mutators]) and uses the resulting mutator to create an @deftech{expression mutator} (with @racket[make-expr-mutator]).
+The expression mutator traverses the syntax it receives, searching for @tech{mutation points} for the simple mutator(s) it was created with.
+In other words, @racket[make-expr-mutator] lifts a simple mutator from mutating single expressions to mutating expressions including all of their sub-expressions.
+
+Finally, one can use an expression mutator to create a @deftech{program mutator} (with @racket[make-program-mutator]).
+The program mutator traverses a whole program / module based on a notion of top level forms, deciding which top level forms to consider for mutation, and communicating to its caller additional information about which top level form is selected for mutation by a given @tech{mutation index} -- or raising an error if the index exceeds the maximum possible for a program.
 
 
 @subsection[#:tag "literature"]{The mutation literature}
@@ -130,6 +135,7 @@ The core ideas of mutation originate in these papers:
 ]
 
 
+@section{Mutators}
 @subsection[#:tag "definition"]{Defining mutators}
 @defmodule[mutate/define @; #:multi (mutate )
 ]
@@ -538,10 +544,10 @@ A mutator that does nothing to its argument.
 
 
 
-@subsection[#:tag "traversal"]{Expression and program mutators: syntax traversal}
+@section[#:tag "traversal"]{Expression and program mutators: syntax traversal}
 @defmodule[mutate/program]
 
-@subsubsection{Expression mutators}
+@subsection{Expression mutators}
 
 @(define expr-mutator-eval (new-eval))
 
@@ -646,7 +652,7 @@ Expression selectors are functions that, provided the syntax of an expression, r
 The expression selector that selects everything.
 }
 
-@subsubsection{Program mutators}
+@subsection{Program mutators}
 @defproc[(make-program-mutator [mutator mutator/c]
 			       [select top-level-selector/c select-all])
 	 ({syntax? mutation-index?} {counter?} . ->* . (mutated/c mutated-program?))]{
@@ -783,4 +789,17 @@ Some top level selectors for common cases.
 
 
 @subsection[#:tag "logging"]{Mutation logging}
+@defmodule[mutate/define]
+
+@racket[maybe-mutate] logs a mutation message when it executes a mutation on the @racket[mutate-logger] (topic @tt{mutate}) at level @tt{info}.
+The message has a data payload which is a list of two elements: the original syntax and then the mutated syntax.
+
+Additionally, mutators should all log their type before performing any mutations (using @racket[log-mutation-type]).
+Hence, the sequence of messages logged over the course of a call to a mutator contains sufficient information to recover which mutator created the mutant: the last mutation type message before the mutation message is the type of the mutator.
+
+@defthing[#:kind "logger" mutate-logger logger?]{}
+@defproc[(log-mutation-type [type string?]) any]{
+Logs the type of a mutator that may perform a mutation.
+This should be logged by every mutator before mutating anything.
+}
 
