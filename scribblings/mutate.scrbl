@@ -721,15 +721,17 @@ Similar to @racket[without-counter], transforms a @tech{program mutator} returne
 The wrapper of mutated program syntax, returned by @tech{program mutator}s, which carries the identifier of the top level form mutated alongside the mutated program syntax.
 }
 
-@defthing[#:kind "contract" top-level-selector/c (syntax? . -> . (values (or/c #f (listof syntax?))
-		 	    			 	       	 	 (or/c #f any/c)
-									 (or/c #f ((listof syntax?) . -> . syntax?))))]{
+@defthing[#:kind "contract" top-level-selector/c
+          (syntax? . -> . (or/c #f
+                          	(list/c (listof syntax?)
+                                	any/c
+                                	((listof syntax?) . -> . syntax?))))]{
 The contract for top level selectors provided to @racket[make-program-mutator].
 
 Top level selectors are functions that, provided the syntax of a top level form, return either
 @itemlist[
-@item{Three falses, to indicate that the form should not be considered for mutation or traversal, or}
-@item{The following three things:
+@item{False, to indicate that the form should not be considered for mutation or traversal, or}
+@item{A list of three things:
 @itemlist[
 @item{A listof of syntaxes to be considered for mutation and traversal. This may just be the whole top level form, or it may be sub-parts of it.}
 @item{An identifier for this top level form.}
@@ -743,10 +745,10 @@ Top level selectors are functions that, provided the syntax of a top level form,
 (define (select-define-body-only stx)
   (syntax-parse stx
     [({~literal define} {~or* plain-name:id sig:function-header} body ...)
-     (values (attribute body)
-	     (or (attribute plain-name) (attribute sig.name))
-	     (λ (mutated-body-stxs) #`(define {~? plain-name sig} #,@mutated-body-stxs)))]
-    [_ (values #f #f #f)]))
+     (list (attribute body)
+	   (or (attribute plain-name) (attribute sig.name))
+	   (λ (mutated-body-stxs) #`(define {~? plain-name sig} #,@mutated-body-stxs)))]
+    [_ #f]))
 (define mutate-program
   (make-program-mutator (make-expr-mutator increment-integer-consts)
   			select-define-body-only))

@@ -47,8 +47,9 @@
     (if (<= counter mutation-index)
         (syntax-parse stx
           [(top-level-e e ...)
-           #:do [(define-values {body-stxs top-level-id reconstruct-e}
-                   (select #'top-level-e))]
+           #:do [(match-define (list body-stxs top-level-id reconstruct-e)
+                   (or (select #'top-level-e)
+                       (list #f #f #f)))]
            #:when body-stxs
            (mutated-do
             #:count-with [__ counter]

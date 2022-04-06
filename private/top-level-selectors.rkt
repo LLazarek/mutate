@@ -37,49 +37,32 @@
     [else '<no-name-found>]))
 
 (define top-level-selector/c
-  ;; todo: simpler interface and more consistent with expression-selectors
-  #;(syntax? . -> . (or/c #f
-                        (list (listof syntax?)
-                              any/c
-                              ((listof syntax?) . -> . syntax?))))
-  (->i ([stx syntax?])
-       (values [parts-to-mutate (or/c #f (listof syntax?))]
-               [mutated-id any/c]
-               [reconstruct-stx (or/c #f ((listof syntax?) . -> . syntax?))])
-       #:post/desc {parts-to-mutate mutated-id reconstruct-stx}
-       (or (andmap false? (list parts-to-mutate
-                                mutated-id
-                                reconstruct-stx
-                                ;; force to bool
-                                #f))
-           (andmap identity (list parts-to-mutate
-                                  mutated-id
-                                  reconstruct-stx
-                                  ;; force to bool
-                                  #t))
-           "Either all results must be #f or all must be non-#f.")))
+  (syntax? . -> . (or/c #f
+                        (list/c (listof syntax?)
+                                any/c
+                                ((listof syntax?) . -> . syntax?)))))
 
 (define (select-all stx)
   (define name (leftmost-identifier-in stx))
   (match (syntax->list stx)
     [(? list? stx/list)
-     (values stx/list
-             name
-             (λ (stxs/mutated)
-               (datum->syntax stx stxs/mutated)))]
+     (list stx/list
+           name
+           (λ (stxs/mutated)
+             (datum->syntax stx stxs/mutated)))]
     [else
-     (values (list stx)
-             name
-             (match-lambda
-               [(list stx/datum/mutated)
-                stx/datum/mutated]
-               [a-bigger-list
-                (error 'select-all
-                       @~a{
-                           Mutation produced multiple stxs from one stx?
-                           Original: @stx
-                           Mutated: @a-bigger-list
-                           })]))]))
+     (list (list stx)
+           name
+           (match-lambda
+             [(list stx/datum/mutated)
+              stx/datum/mutated]
+             [a-bigger-list
+              (error 'select-all
+                     @~a{
+                         Mutation produced multiple stxs from one stx?
+                         Original: @stx
+                         Mutated: @a-bigger-list
+                         })]))]))
 
 (define (select-define/contract-body stx)
   (syntax-parse stx
@@ -92,10 +75,10 @@
            (syntax/loc stx
              (def.def/c def.id/sig def.ctc
                mutated-body-e ...))]))
-      (values to-mutate
-              (leftmost-identifier-in #'def.id/sig)
-              reconstruct-definition)]
-    [_ (values #f #f #f)]))
+      (list to-mutate
+            (leftmost-identifier-in #'def.id/sig)
+            reconstruct-definition)]
+    [_ #f]))
 
 (define (select-any-define-named-form-body stx)
   (syntax-parse stx
@@ -106,10 +89,10 @@
         (quasisyntax/loc stx
           (def.def-form def.id/sig
             #,@body-stxs/mutated)))
-      (values body-stxs
-              (leftmost-identifier-in #'def.id/sig)
-              reconstruct-definition)]
-    [_ (values #f #f #f)]))
+      (list body-stxs
+            (leftmost-identifier-in #'def.id/sig)
+            reconstruct-definition)]
+    [_ #f]))
 
 (define (select-define-body stx)
   (syntax-parse stx
@@ -132,10 +115,10 @@
              body-stxs/mutated))
        (quasisyntax/loc stx
          (def id/sig {~? {~@ : type}} #,@body-stxs/no-begin)))
-     (values body-stxs
-             (leftmost-identifier-in #'id/sig)
-             reconstruct-definition)]
-    [_ (values #f #f #f)]))
+     (list body-stxs
+           (leftmost-identifier-in #'id/sig)
+           reconstruct-definition)]
+    [_ #f]))
 
 (module+ test
   (require ruinit
@@ -147,7 +130,7 @@
                               body-stxs/expected
                               id/expected
                               test-reconstruct)
-    (define-values {body-stxs id reconstruct}
+    (match-define (list body-stxs id reconstruct)
       (selector stx))
     (and/test/message
      [(for/and/test ([part (in-list body-stxs)]
@@ -179,10 +162,10 @@
   (syntax-parse stx
     #:datum-literals [define :]
     [({~and : colon} name:id . _)
-     (values (list stx)
-             (format-symbol "~a:annotation"
-                            (leftmost-identifier-in #'name))
-             first)]
+     (list (list stx)
+           (format-symbol "~a:annotation"
+                          (leftmost-identifier-in #'name))
+           first)]
     [({~and {~datum define} def} id/sig {~optional {~seq {~and : colon} T}}
                                  body ...)
      (define body-stxs (syntax-e (syntax/loc stx
@@ -195,11 +178,11 @@
                 (def id/sig colon mutated-T mutated-body-stx ...))])
            (quasisyntax/loc stx
              (def id/sig #,@body-stxs/mutated))))
-     (values body-stxs
-             (format-symbol "~a:body"
-                            (leftmost-identifier-in #'id/sig))
-             reconstruct-definition)]
-    [else (values #f #f #f)]))
+     (list body-stxs
+           (format-symbol "~a:body"
+                          (leftmost-identifier-in #'id/sig))
+           reconstruct-definition)]
+    [else #f]))
 
 (module+ test
   (test-begin
