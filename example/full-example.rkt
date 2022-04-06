@@ -8,7 +8,7 @@
   #:when (list? (syntax->datum #'cond))
   #'(if cond e t))
 
-(define-constant-mutator (constant-swap v) #:type "constant-swap"
+(define-constant-mutator (constant-swap v)
   [(? number?) #:-> (- v)])
 
 (define active-mutators (list if-swap

@@ -24,6 +24,7 @@
           [rename try-get-mutator-type
                   mutator-type
                   ({mutator/c} {string?} . ->* . string?)]
+          [current-mutator-type (parameter/c string?)]
 
           ;; Base mutator
           ;; essentially a more restricted mutator/c
@@ -78,19 +79,27 @@
          "logger.rkt"
          "mutated.rkt")
 
+(define current-mutator-type (make-parameter "<?>"))
+
 (define (try-get-mutator-type m [default "<?>"])
   (if (mutator? m)
       (mutator-type m)
       default))
 
-(define-simple-macro (define-mutator (name stx mutation-index counter) #:type [type-name type] e ...)
-  (define name (let ([type-name type])
-                 (mutator (λ (stx mutation-index counter) e ...)
-                          type-name))))
-(define-simple-macro (define-dependent-mutator (name . args) #:type [type-name type] e ...)
-  (define name (let ([type-name type])
-                 (dependent-mutator (λ args e ...)
-                                    type))))
+(define-simple-macro (define-mutator (name stx mutation-index counter) #:type type
+                       e ...)
+  (define name (let ([the-type type])
+                 (mutator (λ (stx mutation-index counter)
+                            (parameterize ([current-mutator-type the-type])
+                              e ...))
+                          the-type))))
+(define-simple-macro (define-dependent-mutator (name . args) #:type type
+                       e ...)
+  (define name (let ([the-type type])
+                 (dependent-mutator (λ args
+                                      (parameterize ([current-mutator-type the-type])
+                                        e ...))
+                                    the-type))))
 
 
 ;; Base mutator: all mutation happens through this function
@@ -109,7 +118,7 @@
     (and (= mutation-index counter)
          (not (equivalent? old new))))
   (when should-apply-mutation?
-    (log-mutation old new))
+    (log-mutation old new (current-mutator-type)))
   (mutated
    (if should-apply-mutation?
        new
@@ -148,7 +157,7 @@
   #:with [left-right-pair ...] #'[{~@ (left . right) (right . left)} ...]
   (begin
     (define swaps '((orig . new) ... left-right-pair ...))
-    (define-mutator (name maybe-atom-stx mutation-index counter) #:type [type-name type]
+    (define-mutator (name maybe-atom-stx mutation-index counter) #:type type
       (if (syntax->list maybe-atom-stx)
           ;; Value mutators only make sense for atoms, so don't even try to apply
           ;; them on syntax-lists. This prevents accidentally stripping
@@ -163,20 +172,16 @@
                 (apply-swap-alist (syntax->datum maybe-atom-stx)
                                   swaps
                                   mutation-index
-                                  counter
-                                  #:type type-name))))))
+                                  counter))))))
 
 (define (apply-swap-alist original-value
                           swap-alist
                           mutation-index
-                          counter
-                          #:type mutation-type)
+                          counter)
   (define mutator-sequence
     (for/list ([{orig new} (in-dict swap-alist)])
       (make-guarded-mutator (λ (v) (equal? v orig))
-                            (λ (v)
-                              (log-mutation-type mutation-type)
-                              new))))
+                            (λ (v) new))))
   (apply-mutators original-value
                   mutator-sequence
                   mutation-index
@@ -186,14 +191,13 @@
                        {~optional {~seq #:type type}
                                   #:defaults ([type #'(~a 'name)])}
                        [pat:expr #:-> replacement:expr] ...)
-  (define-mutator (name maybe-atom-stx mutation-index counter) #:type [the-type type]
+  (define-mutator (name maybe-atom-stx mutation-index counter) #:type type
     (define mutation-sequence
       (list
        (make-guarded-mutator (λ (v) (match v
                                       [pat #t]
                                       [else #f]))
                              (match-lambda [(and value-name pat)
-                                            (log-mutation-type the-type)
                                             replacement]))
        ...))
     (if (syntax->list maybe-atom-stx)
@@ -223,8 +227,8 @@
 ;; mutator needs to guard any syntax from mutation, because the application of
 ;; `maybe-mutate` is out of your control, and guarding must be done outside of
 ;; that.
-(define (make-guarded-mutator should-apply? apply #:type [type "<guarded-mutator>"])
-  (define-mutator (the-mutator orig-v mutation-index counter) #:type [_ type]
+(define (make-guarded-mutator should-apply? apply #:type [type (current-mutator-type)])
+  (define-mutator (the-mutator orig-v mutation-index counter) #:type type
     (if (and (<= counter mutation-index)
              (should-apply? orig-v))
         (maybe-mutate-value orig-v
@@ -238,13 +242,12 @@
 ;; (stx? index? . -> . (or/c stx? #f))
 ;; ->
 ;; mutated?
-(define (make-stream-mutator next-mutation #:type [type "<stream-mutator>"])
+(define (make-stream-mutator next-mutation #:type [type (current-mutator-type)])
   ;; One might think we could take a shortcut here by just calling
   ;; `(next-mutation stx (- mutation-index counter))`
   ;; This doesn't work because some change in between there might
   ;; produce a syntactically equivalent mutant!
-  (define-mutator (the-mutator stx mutation-index counter) #:type [the-type type]
-    (log-mutation-type the-type)
+  (define-mutator (the-mutator stx mutation-index counter) #:type type
     (let loop ([mutated-so-far (no-mutation stx mutation-index counter)]
                [i 0])
       (cond [(> (mutated-new-counter mutated-so-far) mutation-index)
@@ -272,8 +275,7 @@
   ;; `(next-mutation stx (- mutation-index counter))`
   ;; This doesn't work because some change in between there might
   ;; produce a syntactically equivalent mutant!
-  (define-mutator (the-mutator stx mutation-index counter) #:type [the-type type]
-    (log-mutation-type the-type)
+  (define-mutator (the-mutator stx mutation-index counter) #:type type
     (define next-mutation (make-stream stx)) ;; todo: in fact couldn't make-stream actually return a racket stream?
     (let loop ([mutated-so-far (no-mutation stx mutation-index counter)]
                [i 0])
@@ -321,7 +323,7 @@
                                  [else #f]))
                          #:type type)))
 
-(define-mutator (no-mutation v mutation-index counter) #:type [_ "<no-mutation>"]
+(define-mutator (no-mutation v mutation-index counter) #:type "<no-mutation>"
   (mutated v counter))
 
 (define (compose-mutators . mutators)

@@ -27,11 +27,6 @@
 @author[(author+email "Lukas Lazarek" "lukas.lazarek@eecs.northwestern.edu"
 #:obfuscate? #t)]
 
-TODO:
-- refactor the mutator type system to be less error prone using a parameter.
-Then all of the `define-mutator` forms can implicitly wrap their body with `parameterize` to automatically have their type recorded.
-
-
 
 
 
@@ -228,15 +223,13 @@ Each matching @racket[value-swap-spec] is tried in turn, so they may overlap.
 }
 
 @defform[
-(define-mutator (id stx-id mutation-index-id counter-id) #:type [type-id type-expr]
+(define-mutator (id stx-id mutation-index-id counter-id) #:type type-expr
   body ...)
 ]{
 Defines a general-purpose mutator accepting first the syntax to mutate, then the @tech{mutation index}, and finally the current @tech{mutation counter}.
 
 Unlike the simpler mutator definition forms above, the @racket[body] of the mutator should produce a @racket[mutated] value rather than plain syntax.
 The result should be a mutated version of the syntax received, produced with the procedural mutator tools in @secref{procedural-api}.
-
-Additionally, the mutator should log its mutation type with @racket[log-mutation-type] before performing any mutation.
 
 Usually this form is only necessary for complex mutators, and even then most of the time you will be better off building such a mutator out of simpler pieces defined with the above forms and combined together with @racket[compose-mutators].
 One common exception is mutators for which the number of possible mutations depends on the shape of the syntax itself;
@@ -246,10 +239,9 @@ See also @racket[make-stream-mutator], which may provide a more convenient inter
 
 @examples[
 (define-mutator (rearrange-positional-exprs stx mutation-index counter)
-  #:type [type "position-swap"]
+  #:type "position-swap"
   (syntax-parse stx
     [(head e ...)
-     (log-mutation-type type)
      (mutated-do-single [rearranged-e-stxs (rearrange-in-sequence (attribute e)
                                                              	  mutation-index
                                                              	  counter)]
@@ -263,7 +255,7 @@ See also @racket[make-stream-mutator], which may provide a more convenient inter
 }
 
 @defform[
-(define-dependent-mutator (id formal ...) #:type [type-id type-expr]
+(define-dependent-mutator (id formal ...) #:type type-expr
   body ...)
 ]{
 Defines a dependent mutator, which is roughly a function of any arguments that produces a mutator.
@@ -325,7 +317,7 @@ Hence, the form is analagous to @racket[match-let*], where every clause always h
 The @racket[#:return] clause terminates the sequence with an expression for the resulting piece of syntax; @racket[mutated-do] implicitly wraps that resulting syntax with the current value of the counter.
 
 @examples[#:eval mutated-do-eval
-(define-mutator (to-a/b/c! stx mutation-index counter) #:type [type "to-a/b/c!"]
+(define-mutator (to-a/b/c! stx mutation-index counter) #:type "to-a/b/c!"
   (mutated-do #:count-with [current-counter counter]
     [after-a     (maybe-mutate stx       #'a! mutation-index current-counter)]
     (code:comment "`current-counter` is now counter + 1")
@@ -343,7 +335,7 @@ The @racket[#:let] @racket[action-clause] inserts a @racket[let]-like binding of
 
 
 @examples[#:eval mutated-do-eval
-(define-mutator (add-length stx mutation-index counter) #:type [type "add-length"]
+(define-mutator (add-length stx mutation-index counter) #:type "add-length"
   (mutated-do #:count-with [current-counter counter]
     [maybe-a/b/c!    (to-a/b/c! stx mutation-index current-counter)]
     #:let [stx-parts (syntax->list maybe-a/b/c!)]
@@ -362,8 +354,7 @@ The @racket[#:let] @racket[action-clause] inserts a @racket[let]-like binding of
 The @racket[#:in] terminating clause terminates the sequence, but the expected result of the @racket[mutated-expr] should be a @racket[mutated] value, which is the result of the overall sequence as-is (no implicit wrapping).
 @examples[#:eval mutated-do-eval
 #:label @para{For example, @tt{to-a/b/c!} could have terminated the sequence directly with the final application of @racket[maybe-mutate]:}
-(define-mutator (to-a/b/c!-2 stx mutation-index counter) #:type [type "to-a/b/c!"]
-  (log-mutation-type type)
+(define-mutator (to-a/b/c!-2 stx mutation-index counter) #:type "to-a/b/c!"
   (mutated-do #:count-with [current-counter counter]
     [after-a     (maybe-mutate stx       #'a! mutation-index current-counter)]
     [after-a+b   (maybe-mutate after-a   #'b! mutation-index current-counter)]
@@ -454,11 +445,13 @@ Applies a sequence of mutators in order.
 
 @defproc[(make-guarded-mutator [guard (syntax? . -> . boolean?)]
 			       [transformer (syntax? . -> . syntax?)]
-			       [#:type type string? "<guarded-mutator>"])
+			       [#:type type string?])
 	 mutator/c]{
 Creates a mutator which performs the transformation @racket[transformer] on syntax only if @racket[guard] produces @racket[#t].
 
 This is a more flexible, if often more verbose, version of @racket[define-simple-mutator].
+
+If not provided, @racket[type] defaults to the type of the mutator in which @racket[make-stream-mutator] is applied.
 
 @examples[
 (define if-swap2
@@ -472,12 +465,14 @@ This is a more flexible, if often more verbose, version of @racket[define-simple
 }
 
 @defproc[(make-stream-mutator [transformer (syntax counter? . -> . (or/c syntax? #f))]
-			      [#:type type string? "<stream-mutator>"])
+			      [#:type type string?])
 	 mutator/c]{
 Creates a mutator that draws syntax transformations from @racket[transformer], treating it like a stream of mutations to a given piece of syntax that can be indexed into with its second argument.
 The stream is considered finished when @racket[transfomer] returns false.
 
 The resulting mutator maps the sequence of mutations produced by @racket[transformer] to distinct @tech{mutation point}s on the same piece of syntax.
+
+If not provided, @racket[type] defaults to the type of the mutator in which @racket[make-stream-mutator] is applied.
 
 @examples[
 (define (pick-permutation stx i)
@@ -577,8 +572,7 @@ This effectively hides any @tech{mutation point}s in subexpressions of @racket[s
 
 This is useful for ensuring that only certain mutations can happen to a form, like in the example below.
 @examples[
-(define-mutator (negate-if-cond-only stx mutation-index counter) #:type [type "negate-if-cond-only"]
-  (log-mutation-type type)
+(define-mutator (negate-if-cond-only stx mutation-index counter) #:type "negate-if-cond-only"
   (syntax-parse stx
     [({~literal if} cond t e)
      (code:comment "Guard below marks conditions so that sub-parts don't get considered for mutation.")
@@ -788,18 +782,18 @@ Some top level selectors for common cases.
 
 
 
-@subsection[#:tag "logging"]{Mutation logging}
+@subsection[#:tag "logging"]{Logging: recovering the mutation type that causes a mutation}
 @defmodule[mutate/define]
 
 @racket[maybe-mutate] logs a mutation message when it executes a mutation on the @racket[mutate-logger] (topic @tt{mutate}) at level @tt{info}.
-The message has a data payload which is a list of two elements: the original syntax and then the mutated syntax.
+The message has a data payload which is a list of three elements:
+@itemlist[
+@item{the @tech{mutator type} of the mutator that caused the mutation}
+@item{the original syntax}
+@item{the mutated syntax}
+]
 
-Additionally, mutators should all log their type before performing any mutations (using @racket[log-mutation-type]).
-Hence, the sequence of messages logged over the course of a call to a mutator contains sufficient information to recover which mutator created the mutant: the last mutation type message before the mutation message is the type of the mutator.
+Since all mutators boil down to applications of @racket[maybe-mutate], the @racket[mutate-logger] provides a channel to recover which mutator is used to mutate a program.
 
 @defthing[#:kind "logger" mutate-logger logger?]{}
-@defproc[(log-mutation-type [type string?]) any]{
-Logs the type of a mutator that may perform a mutation.
-This should be logged by every mutator before mutating anything.
-}
 
