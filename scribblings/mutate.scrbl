@@ -235,7 +235,7 @@ Usually this form is only necessary for complex mutators, and even then most of 
 One common exception is mutators for which the number of possible mutations depends on the shape of the syntax itself;
 for example, a mutator that swaps every adjacent pair of expressions (as in the example below) cannot be defined in terms of the simpler forms.
 
-See also @racket[make-stream-mutator], which may provide a more convenient interface for defining such mutators.
+See also @racket[make-simple-stream-mutator] and @racket[make-stream-mutator], which may provide a more convenient interface for defining such mutators.
 
 @examples[
 (define-mutator (rearrange-positional-exprs stx mutation-index counter)
@@ -451,7 +451,7 @@ Creates a mutator which performs the transformation @racket[transformer] on synt
 
 This is a more flexible, if often more verbose, version of @racket[define-simple-mutator].
 
-If not provided, @racket[type] defaults to the type of the mutator in which @racket[make-stream-mutator] is applied.
+If not provided, @racket[type] defaults to the type of the mutator in which @racket[make-guarded-mutator] is applied.
 
 @examples[
 (define if-swap2
@@ -464,30 +464,27 @@ If not provided, @racket[type] defaults to the type of the mutator in which @rac
 ]
 }
 
-@defproc[(make-stream-mutator [transformer (syntax counter? . -> . (or/c syntax? #f))]
+@defproc[(make-stream-mutator [make-stream (syntax? . -> . (stream/c syntax?))]
 			      [#:type type string?])
 	 mutator/c]{
-Creates a mutator that draws syntax transformations from @racket[transformer], treating it like a stream of mutations to a given piece of syntax that can be indexed into with its second argument.
-The stream is considered finished when @racket[transfomer] returns false.
-
+Creates a mutator that draws syntax transformations from a stream of such transformations produced by @racket[make-stream].
 The resulting mutator maps the sequence of mutations produced by @racket[transformer] to distinct @tech{mutation point}s on the same piece of syntax.
 
 If not provided, @racket[type] defaults to the type of the mutator in which @racket[make-stream-mutator] is applied.
 
 @examples[
-(define (pick-permutation stx i)
-  (define l (syntax->list stx))
-  (define perms (permutations l))
-  (and (< i (length perms))
-       (datum->syntax stx (list-ref perms i))))
-(define rearrange (make-stream-mutator pick-permutation))
+(require racket/stream)
+(define (permutation-stream stx)
+  (for/stream ([p (in-permutations (syntax->list stx))])
+    (datum->syntax stx p)))
+(define rearrange (make-stream-mutator permutation-stream))
 
-(rearrange #'(a b c) 0 0) @; #'(b a c)
-(rearrange #'(a b c) 1 0) @; #'(a c b)
-(rearrange #'(a b c) 2 0) @; #'(c a b)
-(rearrange #'(a b c) 3 0) @; #'(b c a)
-(rearrange #'(a b c) 4 0) @; #'(c b a)
-(rearrange #'(a b c) 5 0) @; #'(a b c)
+(rearrange #'(a b c) 0 0)
+(rearrange #'(a b c) 1 0)
+(rearrange #'(a b c) 2 0)
+(rearrange #'(a b c) 3 0)
+(rearrange #'(a b c) 4 0)
+(rearrange #'(a b c) 5 0)
 ]
 
 }
