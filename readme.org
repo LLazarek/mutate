@@ -1,281 +1,16 @@
 #+TITLE: mutate
 
-* Mutating syntax
-To mutate syntax, you need to use =make-expr-mutator= or =make-program-mutator= from =mutate-expr.rkt= or =mutate-program.rkt= to create functions that do the mutation.
+A mutation framework for s-expression languages.
 
-Each of these functions build a mutating function out of a =mutator=.
-A =mutator= (see =mutator/c= in =mutator-lib.rkt=) is a function that performs mutation using the =mutated= API.
-Basically, it's a function that takes three arguments:
-1. a piece of syntax
-2. a mutation index
-3. a counter
-and it should return a =mutated?= (defined in =mutated.rkt=, along with several primitive operations and forms for working with =mutated?= objects).
-Any changes to the syntax that it does must happen through =maybe-mutate=, and there are a few utilities to help write and compose mutators along with that in =mutator-lib.rkt=. =mutate-util.rkt= also provides a few other utilities for implementing mutators.
+See the documentation for a full overview, and the [[*An example][example below]] for a teaser.
 
-It's best to define mutators using the =define-mutator= macros.
-Simple rearrangement or swapping mutators defined with =define-id-mutator=, =define-value-mutator=, and =define-simple-mutator= do not even need to use the =mutated= API.
+* Installation
+: raco pkg install https://github.com/LLazarek/mutate
 
-Mutators can be combined to build more complex mutators with =compose-mutators=.
+* Docs
+: raco docs mutate
 
-Mutators can also signal to other mutators and =mutate-expr= that a part of their result syntax should not be mutated any further by using =mutation-guard=.
-One tricky point about =mutation-guard=:
-If you want a piece of syntax to be guarded whether a mutation is applied or not, you should use =mutation-guard= *outside* of any =maybe-mutate='s, so that even if the mutation doesn't end up being applied the syntax gets guarded.
-
-=mutate-expr= works as follows:
-- If the syntax isn't guarded, it applies the mutator to the syntax
-- If the resulting syntax isn't guarded, and it's a syntax-list, it splits it up and recurs on all subparts
-
-=make-expr-mutator= and =make-program-mutator= also take optional filtering functions to select which kinds of expressions should be mutated.
-For =make-program-mutator=, these filters have a specific API shown in =top-level-selectors.rkt=.
-
-=mutate-program= is meant to be the usual entrypoint to mutating syntax.
-
-* Creating a mutation engine
-See the already-defined mutators in =mutators.rkt=.
-The tools in =mutator-lib.rkt= are also available to make writing new mutators easier.
-
-Then, combine all of the mutations (mutators) that you want using =compose-mutators=, and create an expression mutator and then a program mutator.
-
-* The API
-** mutator-lib.rkt
-This module provides the definitions of mutators and combinators for working with them.
-
-Conceptually, a mutator is a function that swaps an expression with another one (which is usually very similar to the original, hence it's called a mutation).
-A mutator may have multiple ways it could mutate the same expression, so mutators always accept two extra arguments: a =mutation-index= and a =counter=.
-The =mutation-index= is an index that serves as a unique identifier of which mutant to select among all of those that could be created by a mutator.
-The =counter= is an index that counts up to =mutation-index= so that a mutator knows when a particular mutation is the one to make.
-This decision of when to mutate is abstracted into the =maybe-mutate= function, which allows mutators to be written as if they made *all* mutations they possibly could, and =maybe-mutate= does the work of making sure just the right one actually happens.
-
-Note: Mutators don't do any of the work of walking syntax to find suitable parts to mutate. Instead, they should just look at the top level shape of the syntax and based on that (possibly) make a mutation.
-The work of finding places to apply a mutator is done by [[*make-expr-mutator][make-expr-mutator]]
-
-*** Mutators
-#+BEGIN_SRC racket
-mutator/c : contract?
-  = (first-or/c (and/c mutator? (struct/c mutator mutator-function/c mutator-type?))
-                mutator-function/c)
-
-mutator-function/c : contract?
-  = (any/c mutation-index? counter? . -> . mutated?)
-
-mutation-index? = counter? = natural?
-mutator-type? = string?
-#+END_SRC
-
-Mutators are either:
-1. a function that replaces a syntax expression with another one.
-2. a =mutator?= produces by one of the =define*-mutator= forms, which behaves like the first case
-
-*** Defining mutators
-**** id mutators
-#+BEGIN_SRC racket
-(define-id-mutator name #:type type-expr [left-id swap-direction right-id] ...)
-  swap-direction = #:-> | #:<->
-#+END_SRC
-
-Defines a mutator that swaps identifiers (in the direction(s) specified by =swap-direction=).
-
-Example:
-#+BEGIN_SRC racket
-> (define-id-mutator swap-car-and-cdr #:type "swap-car-and-cdr"
-    [car #:<-> cdr])
-> (swap-car-and-cdr #'car 0 0)
-(mutated #'cdr 1)
-> (swap-car-and-cdr #'cdr 0 0)
-(mutated #'car 1)
-> (swap-car-and-cdr #'first 0 0)
-(mutated #'first 0)
-#+END_SRC
-
-**** Value mutators
-#+BEGIN_SRC racket
-(define-value-mutator (name value-id) #:type type-expr [pattern #:-> replacement] ...)
-#+END_SRC
-
-Defines a mutator that swaps literal values using patterns as in =match=.
-The mutator tries every pattern in order, like match, but every pattern that matches counts as a distinct mutation.
-
-Example:
-#+BEGIN_SRC racket
-> (define-value-mutator (number-swap v) #:type "number-swap"
-    [1            #:-> 0]
-    [(? integer?) #:-> (- v)]
-    [(? float?)   #:-> (truncate v)])
-> (number-swap #'1 0 0) ; first clause
-(mutated #'0 1)
-> (number-swap #'1 1 0) ; second clause
-(mutated #'-1 2)
-> (number-swap #'1.5 0 0) ; second clause
-(mutated #'1.0 1)
-#+END_SRC
-
-**** Other simple pattern-based mutators
-#+BEGIN_SRC racket
-(define-simple-mutator (name stx-id)
-   maybe-type
-   #:pattern pattern
-   maybe-guard
-   body ...)
-  maybe-type =
-               | #:type type
-  maybe-guard =
-                | #:when guard-expr
-#+END_SRC
-
-Defines a mutator for syntax matching =pattern=, replacing the entire syntax object with the result of =body ...=
-
-Example:
-#+BEGIN_SRC racket
-> (define-simple-mutator (if-swap stx)
-     #:pattern ({~literal if} cond t e)
-     #'(if cond e t))
-> (if-swap #'(if #t 'y 'n) 0 0) ; matches pattern
-(mutated #'(if #t 'n 'y) 1)
-> (if-swap #'(not-if #t 'y 'n) 0 0) ; doesn't match pattern
-(mutated #'(not-if #t 'y 'n) 0)
-> (if-swap #'(add1 (if #t 'y 'n)) 0 0) ; doesn't match pattern
-(mutated #'(add1 (if #t 'y 'n)) 0)
-> (if-swap #'(if (if 0 1 2) 'y 'n) 1 0) ; only considers top level of syntax
-(mutated #'(if (if 0 1 2) 'y 'n) 1)
-#+END_SRC
-
-
-**** Complex mutators
-#+BEGIN_SRC racket
-(define-mutator (name stx-id mutation-index-id counter-id) #:type [type-id type-expr]
-   body ...)
-#+END_SRC
-
-The general form for defining mutators. Unlike the above mutator-defining forms, using this form you must eventually call =maybe-mutate= to make the desired mutation(s).
-
-#+BEGIN_SRC racket
-(maybe-mutate orig-stx new-stx index counter [#:equivalent? equivalent?]) ⟶ mutated?
-  orig-stx : any/c
-  new-stx : any/c
-  index : mutation-index?
-  counter : counter?
-  equivalent? : (any/c any/c . -> . boolean?) = stx-equal?
-#+END_SRC
-
-This is the most primitive function for performing mutation, which all mutators use to make a mutation.
-It decides whether or not to apply the mutation based on =index= and =counter=, and whether =(equivalent? index counter)= is true.
-=equivalent?= is used to discard equivalent mutations (see below example).
-
-Example:
-#+BEGIN_SRC 
-> (maybe-mutate #'1 #'0 0 0) ; index and counter match, do the swap
-(mutated #'0 1)
-> (maybe-mutate #'1 #'0 1 0) ; index and counter don't match, keep original
-(mutated #'1 1)
-> (maybe-mutate #'1 #'0 2 0) ; like above
-(mutated #'1 1)
-> (maybe-mutate #'1 #'1 0 0) ; index and counter match, but mutation in equivalent
-(mutated #'1 0)
-#+END_SRC
-
-**** Dependent mutators
-#+BEGIN_SRC racket
-(define-dependent-mutator (name arg ...) #:type [type-id type-expr]
-   body ...)
-#+END_SRC
-
-Defines a /dependent mutator/, which is a function that accepts =arg ...= and returns a mutator.
-This is typically useful for defining mutators whose behavior depends on the contents of the program, so (one of) the =arg ...= would be the entire program being mutated.
-
-*** Combining mutators
-#+BEGIN_SRC racket
-(compose-mutators . mutators) -> mutator/c
-  mutators : (non-empty-listof mutator/c)
-#+END_SRC
-
-Combines all of the =mutators= into a single mutator performing the mutations of each one in the given order.
-
-Example:
-#+BEGIN_SRC racket
-> (define swap-cons->list-or-append (compose-mutators swap-cons->list swap-cons->append))
-> (swap-cons->list-or-append #'cons 0 0)
-(mutated #'list 1)
-> (swap-cons->list-or-append #'cons 1 0)
-(mutated #'append 2)
-#+END_SRC
-
-
-#+BEGIN_SRC racket
-no-mutation : mutator/c
-#+END_SRC
-The mutator that does nothing.
-
-Example:
-#+BEGIN_SRC racket
-> (no-mutation #'a 0 0)
-(mutated #'a 0)
-#+END_SRC
-
-** mutate-expr.rkt
-This module provides tools for walking syntax and applying mutators at all possible places.
-
-*** make-expr-mutator
-#+BEGIN_SRC racket
-(make-expr-mutator mutator [#:select select-expr]) ⟶ mutator/c
-  mutator : mutator/c
-  select-expr : expression-selector/c
-#+END_SRC
-
-Transforms =mutator=, a mutator that only considers the top level form of a syntax expression, into one that walks the syntax to find all possible mutation targets.
-Targets to be considered can be filtered using =select-expr= (see =expression-selectors.rkt=)
-
-Example:
-#+BEGIN_SRC racket
-> (define if-swap* (make-expr-mutator if-swap))
-> (if-swap* #'(if cond t e) 0 0)
-(mutated #'(if cond e t) 1)
-> (if-swap* #'(if (if 0 1 2) 'y 'n) 0 0) ; now recurs on subparts to find inner if
-(mutated #'(if (if 0 1 2) 'n 'y) 1)
-> (if-swap* #'(if (if 0 1 2) 'y 'n) 1 0) ; now recurs on subparts to find inner if
-(mutated #'(if (if 0 2 1) 'y 'n) 2)
-> (if-swap* #'(add1 (if 0 1 2)) 0 0) ; now recurs on subparts to find inner if
-(mutated #'(add1 (if 0 2 1)) 1)
-#+END_SRC
-
-A few useful expression selectors are provided in =expression-selectors.rkt=, including the most common one:
-- =select-any-expr= does not filter any expressions
-
-** mutate-program.rkt
-This module provides tools for applying mutators across a whole program.
-It serves a similar purpose to [[*mutate-expr.rkt][mutate-expr.rkt]] in walking the program to apply mutators and offering filtering of what gets mutated, but it additionally provides the feature of returning which top level definition in the program is mutated.
-Additionally, a program mutator signals that no mutation with the given id could be found by raising an exception recognizable by =mutation-index-exception?=.
-
-*** make-program-mutator
-#+BEGIN_SRC racket
-(make-program-mutator mutator top-level-selector) ⟶ program-mutator/c
-  mutator : mutator/c
-  top-level-selector : top-level-selector/c
-
-program-mutator/c = ({syntax? mutation-index?} {counter?} . ->* . (mutated/c mutated-program?))
-(struct mutated-program (stx mutated-id))
-#+END_SRC
-
-Transforms =mutator= into a program mutator.
-
-The syntax provided to a program mutator is expected to be a syntax-list of the top-level forms of the program/module.
-That is, for the program
-#+BEGIN_SRC racket
-#lang racket
-(require "foo.rkt")
-(define x 20)
-(bar x)
-#+END_SRC
-it should be
-#+BEGIN_SRC racket
-#'[(require "foo.rkt") (define x 20) (bar x)]
-#+END_SRC
-
-A few useful top-level-selectors are provided by =top-level-selectors.rkt=, including:
-- =select-all= selects every top level form
-- =select-define-body= selects the body of top level =define= forms
-- ... and more
-
-* A complete-ish example
+* An example
 To define a mutation engine that does two things:
 - swap the branches of if's
 - negate all numeric constants
@@ -285,16 +20,15 @@ The same code is also in =full-example.rkt=.
 #+BEGIN_SRC racket
 #lang racket
 
-(require "mutator-lib.rkt"
-         "mutate-expr.rkt"
-         "mutate-program.rkt"
-         syntax/parse)
+(require syntax/parse
+         mutate/define
+         mutate/program)
 
 (define-simple-mutator (if-swap stx)
   #:pattern ({~literal if} cond t e)
   #'(if cond e t))
 
-(define-value-mutator constant-swap #:type "constant-swap" #:bind-value v
+(define-constant-mutator (constant-swap v)
   [(? number?) #:-> (- v)])
 
 (define active-mutators (list if-swap
@@ -324,15 +58,7 @@ The same code is also in =full-example.rkt=.
 ;; done!
 #+END_SRC
 
-* todo
-
-** DONE Split things into a neat private / public interface
-
-** DONE Change mdo and friends to use keywords
-
-** DONE Rename `-value-mutator` to `-constant-mutator`
-
-** TODO Turn readme into docs
+* Todos
 
 ** TODO Add a program mutator wrapper that handles `(module ...)` forms directly
 
