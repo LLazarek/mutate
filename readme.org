@@ -2,7 +2,7 @@
 
 A mutation framework for s-expression languages.
 
-See the documentation for a full overview, and the [[*An example][example below]] for a teaser.
+See the documentation for a full overview, and the example below for a teaser.
 
 * Installation
 : raco pkg install https://github.com/LLazarek/mutate
