@@ -29,7 +29,7 @@
     (and (not (mutation-guarded? expr))
          (select-expr expr)))
 
-  (define (mutate-expr stx mutation-index counter)
+  (define (mutate-expr stx mutation-index [counter 0])
     (match (and (<= counter mutation-index)
                 (select? stx))
       [(list selected-stx reconstruct-original-stx parameters-to-set)

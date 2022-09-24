@@ -30,7 +30,7 @@
 
 
 
-A library for mutating Racket programs.
+A library for mutating s-expression program syntax.
 That is, systematically injecting possible bugs by making small syntactic modifications to a program.
 
 @section{Prologue}
@@ -192,7 +192,8 @@ In addition to the basic model of a mutator as a function, every mutator has a @
 ]{
 The simplest generic mutator definition form.
 
-Defines a simple mutator named @racket[id] that mutates syntax bound to @racket[syntax-id].
+Defines a simple mutator named @racket[id] that mutates syntax bound to @racket[syntax-id], returning the mutated syntax.
+The resulting mutator satisfies the interface @racket[mutator/c].
 
 If provided, @racket[type-name-expr] must produce a string that is the @tech{mutator type} of the mutator.
 If not provided, the type defaults to @racket[id] as a string.
@@ -203,13 +204,13 @@ If provided, @racket[guard-expr] guards the application of the mutator (evaluati
 
 The @racket[body] forms must produce the mutated syntax.
 
-@examples[#:label @para{Example: (The two @tt{0}s are the @tech{mutation index} and @tech{mutation counter} respectively. For the purpose of most examples, the latter can be ignored; see @secref{concepts} and @secref{procedural-api} for details about each, respectively.)}
+@examples[#:label @para{Example: (The @tt{0} is the @tech{mutation index}; see @secref{concepts}.)}
 (define-simple-mutator (if-swap stx)
   #:pattern ({~literal if} c t e)
   #'(if c e t))
 
-(if-swap #'(if (< x 0) 0 (f x)) 0 0)
-(if-swap #'(not-an-if 42 (+ 2 3)) 0 0)]
+(if-swap #'(if (< x 0) 0 (f x)) 0)
+(if-swap #'(not-an-if 42 (+ 2 3)) 0)]
 }
 
 @defform[
@@ -231,10 +232,10 @@ The second form is equivalent to two copies of the first form with swapped sides
   [+ #:<-> -]
   [* #:->  /])
 
-(arithmetic-op-swap #'+ 0 0)
-(arithmetic-op-swap #'- 0 0)
-(arithmetic-op-swap #'* 0 0)
-(code:line (arithmetic-op-swap #'/ 0 0) (code:comment "no mutation"))
+(arithmetic-op-swap #'+ 0)
+(arithmetic-op-swap #'- 0)
+(arithmetic-op-swap #'* 0)
+(code:line (arithmetic-op-swap #'/ 0) (code:comment "no mutation"))
 ]
 }
 
@@ -259,11 +260,11 @@ Each matching @racket[value-swap-spec] is tried in turn, so they may overlap.
   [(and (? number?) (? zero?)) #:-> 1]
   [(? real?)                   #:-> (* 1+0.0i v)])
 
-(number-constant-swap #'5 0 0)
-(number-constant-swap #'5 1 0)
-(number-constant-swap #'5 2 0)
-(number-constant-swap #'0 0 0)
-(number-constant-swap #'0 1 0)]
+(number-constant-swap #'5 0)
+(number-constant-swap #'5 1)
+(number-constant-swap #'5 2)
+(number-constant-swap #'0 0)
+(number-constant-swap #'0 1)]
 }
 
 @subsection{Building a mutation engine from individual mutators}
@@ -314,14 +315,14 @@ Where the second argument is the mutation index to select.
 
 @section[#:tag "procedural-api"]{Low-level mutator tools}
 This section of the library offers a low-level interface to defining mutators.
-This interface requires you (the programmer) to handle an extra piece of information to keep track of @tech{mutation point}s during traversal:
+This interface requires you (the mutator designer) to handle an extra piece of information to keep track of @tech{mutation point}s during traversal:
 
 Internally, this library uses a counter (called a @deftech{mutation counter}) to keep track of the @tech{mutation point}s found as it traverses a program.
 Every mutator consumes a counter and produces an updated counter along with its possibly-mutated result syntax.
 The counter (along with the @tech{mutation index}) provides the mechanism to decide whether a particular @tech{mutation point} should be used or not:
 if a mutator is applied with a counter that is smaller than the mutation index, then that mutator's mutation point should be skipped and the counter incremented to record that a mutation point has been passed;
 when the counter is equal to the mutation index, then the mutation point has been selected and the mutation should be performed as well as incrementing the counter.
-Thus the counter is threaded through the program traversal and mutator applications.
+Thus the counter must be threaded through the program traversal and mutator applications.
 
 With the @tech{mutation counter}, we have all the pieces to fully define what consistutes a mutator concretely.
 A mutator is a function of three arguments: a piece of syntax, a @tech{mutation index}, and the current @tech{mutation counter},
@@ -329,6 +330,9 @@ and it returns two things: the possibly-mutated syntax, and the updated @tech{mu
 Technically, the two results are wrapped in a @racket[mutated] struct.
 See @racket[mutator/c] for all the technical details to the definition, but this is the core idea.
 
+@bold{Important}: it is your responsibility as the designer of a mutator using low-level mutator tools to thread the current counter value.
+Tools like @racket[mutated-do] are provided to lessen this burden: use them.
+Failing to thread the counter properly will result in unpredictable selection of mutants by @tech{mutation index}.
 
 The low level mutator api also offers more control over how mutators come together to build a mutation engine:
 
@@ -354,13 +358,13 @@ The default program mutator probably returns more information than you need, so 
 Defines a general-purpose mutator accepting first the syntax to mutate, then the @tech{mutation index}, and finally the current @tech{mutation counter}.
 
 Unlike the simpler mutator definition forms above, the @racket[body] of the mutator should produce a @racket[mutated] value rather than plain syntax.
-The result should be a mutated version of the syntax received, produced with the low-level mutator tools in @secref{procedural-api}.
+The result should be a mutated version of the syntax received, produced with the low-level mutator tools in @secref{mutation-tools}.
 
 Usually this form is only necessary for complex mutators, and even then most of the time you will be better off building such a mutator out of simpler pieces defined with the above forms and combined together with @racket[compose-mutators].
 One common exception is mutators for which the number of possible mutations depends on the shape of the syntax itself;
 for example, a mutator that swaps every adjacent pair of expressions (as in the example below) cannot be defined in terms of the simpler forms.
 
-See also @racket[make-simple-stream-mutator] and @racket[make-stream-mutator], which may provide a more convenient interface for defining such mutators.
+See also @racket[make-stream-mutator], which may provide a more convenient interface for defining such mutators.
 
 @examples[
 (define-mutator (rearrange-positional-exprs stx mutation-index counter)
@@ -375,8 +379,8 @@ See also @racket[make-simple-stream-mutator] and @racket[make-stream-mutator], w
     [else
      (no-mutation stx mutation-index counter)]))
 
-(rearrange-positional-exprs #'(f 1 2 x y) 0 0)
-(rearrange-positional-exprs #'(f 1 2 x y) 1 0)]
+(rearrange-positional-exprs #'(f 1 2 x y) 0)
+(rearrange-positional-exprs #'(f 1 2 x y) 1)]
 }
 
 @defform[
@@ -391,7 +395,7 @@ The easiest way to produce a mutator is by using one of the above mutator defini
 }
 
 
-@subsection{Low-level mutation interface}
+@subsection[#:tag "mutation-tools"]{Low-level mutation interface}
 @defmodule[mutate/primitives]
 
 @defproc[(maybe-mutate [original syntax?] [new syntax?] [mutation-index mutation-index?] [counter counter?]
@@ -528,13 +532,15 @@ Since they're both just natural numbers, the value of these predicates is purely
 The following procedures provide an api for creating mutators in a different way from the definition forms above, as well as manipulating mutators.
 
 @defthing[#:kind "contract" mutator/c contract?]{
-The contract identifying mutators as produced by the definition forms of @secref{definition} and the mutator creation functions below.
+The contract for mutators.
 
 In fact, plain functions can be used as mutators too, if they have the right interface.
 Roughly, this contract corresponds to either:
 @itemlist[
 @item{A mutator produced by a mutator definition form from @secref{definition} or one of the mutator creation functions below, or}
-@item{a function satisfying @racket[(syntax? mutation-index? counter? . -> . (mutated/c syntax?))]}
+@item{a function satisfying the contract
+@racketblock[({syntax? mutation-index?} {counter?} . ->* . (mutated/c syntax?))]
+(and where the default counter value should in all likelihood be 0).}
 ]
 }
 
@@ -569,7 +575,7 @@ Applies a sequence of mutators in order.
 
 @defproc[(make-guarded-mutator [guard (syntax? . -> . boolean?)]
 			       [transformer (syntax? . -> . syntax?)]
-			       [#:type type string?])
+			       [#:type type string? #f])
 	 mutator/c]{
 Creates a mutator which performs the transformation @racket[transformer] on syntax only if @racket[guard] produces @racket[#t].
 
@@ -768,7 +774,7 @@ The expression selector that selects everything.
 
 @subsubsection{Program mutators}
 @defproc[(make-program-mutator [mutator mutator/c]
-			       [select top-level-selector/c select-all])
+			       [#:select select top-level-selector/c select-all])
 	 ({syntax? mutation-index?} {counter?} . ->* . (or/c (mutated/c mutated-program?)
 	 	   		    	       	       	     #f))]{
 Creates a full @tech{program mutator} out of a @racket[mutator] (which is usually an @tech{expression mutator} produced by @racket[make-expr-mutator]).
@@ -808,7 +814,7 @@ If the program mutator is called with a mutation index that is larger than the t
 (code:comment "with selector")
 (define mutate-program-defines
   (make-program-mutator (make-expr-mutator increment-integer-consts)
-  			select-define-body))
+  			#:select select-define-body))
 (mutate-program-defines #'[(provide x y)
 			   (displayln 0)
 			   (define x 5)
@@ -896,7 +902,7 @@ Top level selectors are functions that, provided the syntax of a top level form,
     [_ #f]))
 (define mutate-program
   (make-program-mutator (make-expr-mutator increment-integer-consts)
-  			select-define-body-only))
+  			#:select select-define-body-only))
 
 (code:comment "0 will not be considered because it is not in the body of a define")
 (mutate-program #'[(provide x y)

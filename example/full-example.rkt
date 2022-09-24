@@ -27,9 +27,9 @@
                                                "zero!"
                                                "positive!")))
                              (displayln y)})
-(with-handlers ([mutation-index-exception? (λ _ (displayln 'done!))])
-  (for ([i (in-naturals)])
-    (displayln (list i (syntax->datum (mutate-program-syntax program-to-mutate i))))))
+(for ([i (in-naturals)])
+  #:break (false? (mutate-program-syntax program-to-mutate i))
+  (displayln (list i (syntax->datum (mutate-program-syntax program-to-mutate i)))))
 ; =>
 ;; (0 ((require a.rkt) (define x (if (yes?) 42 0)) (define y (if (negative? x) negative! (if (zero? x) zero! positive!))) (displayln y)))
 ;; (1 ((require a.rkt) (define x (if (yes?) 0 -42)) (define y (if (negative? x) negative! (if (zero? x) zero! positive!))) (displayln y)))

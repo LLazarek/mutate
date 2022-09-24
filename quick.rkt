@@ -74,5 +74,5 @@
     (define mutate-expr (make-expr-mutator combined-mutators
                                            {~? {~@ #:select expr-selector} {~@}}))
     (define mutate-program (make-program-mutator mutate-expr
-                                                 {~? top-level-selector {~@}}))
+                                                 {~? {~@ #:select top-level-selector} {~@}}))
     (program-mutator-transformer mutate-program)))

@@ -6,7 +6,7 @@
 
 (provide (contract-out
           [make-program-mutator ({mutator/c}
-                                 {top-level-selector/c}
+                                 {#:select top-level-selector/c}
                                  . ->* .
                                  full-program-mutator/c)]
           [without-counter
@@ -52,7 +52,7 @@
 ;; mutate-program may want to descend only into certain top level forms, while
 ;; mutate-expr can descend into everything (mutate-program acts like its
 ;; gatekeeper)
-(define ((make-program-mutator mutate-expr [select select-all])
+(define ((make-program-mutator mutate-expr #:select [select select-all])
          stx mutation-index [counter 0])
   (let/ec bail
     (let mutate-program-rest ([stx stx]

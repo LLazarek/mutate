@@ -8,7 +8,7 @@
 (struct dependent-mutator (maker type)
   #:property prop:procedure (struct-field-index maker))
 
-(define mutator-function/c (any/c mutation-index? counter? . -> . mutated?))
+(define mutator-function/c ({any/c mutation-index?} {counter?} . ->* . mutated?))
 (define mutator-type? string?)
 (define mutator/c (first-or/c (and/c mutator? (struct/c mutator mutator-function/c mutator-type?))
                               mutator-function/c))
@@ -90,7 +90,7 @@
 (define-simple-macro (define-mutator (name stx mutation-index counter) #:type type
                        e ...)
   (define name (let ([the-type type])
-                 (mutator (λ (stx mutation-index counter)
+                 (mutator (λ (stx mutation-index [counter 0])
                             (parameterize ([current-mutator-type the-type])
                               e ...))
                           the-type))))
@@ -294,7 +294,7 @@
 (define (compose-mutators . mutators)
   (if (empty? mutators)
       no-mutation
-      (λ (stx mutation-index counter)
+      (λ (stx mutation-index [counter 0])
         (apply-mutators stx
                         mutators
                         mutation-index
