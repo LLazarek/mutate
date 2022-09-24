@@ -34,27 +34,46 @@ A library for mutating Racket programs.
 That is, systematically injecting possible bugs by making small syntactic modifications to a program.
 
 @section{Prologue}
-@subsection{This library's structure}
-This library consists of two basic pieces.
-First, it provides an embedded language and tools for defining and composing mutators.
-Second, it provides a framework for applying mutators to whole programs.
-
-This documentation is structured according to these two pieces.
-
-@subsection[#:tag "concepts"]{Mutator concepts}
+@subsection[#:tag "concepts"]{Mutation concepts}
+@subsubsection{Mutators}
 This library centers around the concept of a @deftech{mutator}, which describes a small syntactic modification to a piece of syntax.
 A mutator can roughly be thought of as a function from syntax to syntax which does the modification.
 In typical mutation practice, the mutation is meant to introduce a possible change in program behavior --- usually this means a bug.
-For example, a typical standard mutator negates the condition of @racket[if] expressions, which we might write as a kind of pattern transformation like so:
+For example, a typical standard mutator negates the condition of @racket[if] expressions, which we might abstractly write as a kind of pattern transformation like so:
 
 @racket[(if c t e)] ~> @racket[(if (not c) t e)]
 
-By using this mutator on a program, we can create a mutated variant of the program called a @deftech{mutant} program;
-in other words, a possibly-buggy variant of the original program.
-The purpose of mutators is to create mutants.
+Using this library, we can concretely write such a mutator as follows:
 
-Given a whole program, there are typically many possible places that a mutator can be applied.
-For example, this program has two @racket[if] expressions, each of which could be mutated by our if-negating mutator.
+@racketblock[
+(define-simple-mutator (if-negate stx)
+   #:pattern ({~datum if} c t e)
+   #'(if (not c) t e))
+]
+
+Applying this mutator to a fragment of program syntax can create a @emph{mutated} variant of the fragment.
+For instance, the fragment
+@racketblock[
+(if (= a b)
+  (f a)
+  (g a b))
+]
+can be mutated with our if negation to become
+@racketblock[
+(if (not (= a b))
+  (f a)
+  (g a b))
+]
+
+@subsubsection{Mutating full programs}
+Usually, one wants to use mutators to mutate whole programs and create mutated variants of the program, called @deftech{mutant}s.
+
+But mutators only mutate certain fragments of program syntax, which might appear scattered deeply throughout a program.
+Hence, mutating full programs requires finding the expressions that could be mutated.
+Each of those places where mutators could create a mutation are called @deftech{mutation point}s.
+@margin-note{Furthermore, a mutator can also have several mutation points at the same place if it can mutate that piece of syntax in multiple ways.}
+
+For example, this program has two @racket[if] expressions, each of which could be mutated by our if-negating mutator from before.
 @codeblock{
 #lang racket
 (define (abs x)
@@ -67,70 +86,95 @@ For example, this program has two @racket[if] expressions, each of which could b
       'too-big))
 (displayln (f (random)))
 }
-Each of those places where our mutator could be applied are called @deftech{mutation point}s.
-This program illustrates that even our single mutator can have multiple mutation points for some program;
-add in that usually a mutation system includes many different mutators, and any given program will have many mutation points.
 
-In typical mutation practice, however, one only wants to use @emph{one} of those mutation points to mutate a program.
-This means that @tech{mutant}s result from the application of a mutator at a single mutation point, and that a single program has many mutants that one can select from --- one corresponding to each of the mutation points in the program.
+There are several mutation points in this program, but in typical mutation practice, one only wants to mutate @emph{one} of them to create a mutant.
 (Check out @secref{literature} for the details of why one usually wants just one mutation per mutant.)
-Hence, using mutators effectively requires a way to select one mutation point among the many in a program.
 
-This library provides that selection through a pre-defined traversal of programs, which places all of the mutation points of a given program in a sequence.
-For example, if the traversal is roughly top-to-bottom, left-to-right, then the example program from before (with just the if-negating mutator) has a sequence of two mutation points: first the one in @tt{abs} and then the one in @tt{f}.
-We can select one of those mutation points with an index into the sequence, which is called a @deftech{mutation index}.
-The mutation index is the way to select a particular mutation point with this library.
+This library provides a way to select a mutation point by assigning each point an index called the @deftech{mutation index}.
+The first mutation point in the above example has mutation index 0, and the second is 1.
+The order of mutation indexes is defined through a built-in traversal of program syntax.
 
-Summing it all up so far, to mutate a program entails applying a mutator (or several) to a program along with a @tech{mutation index}, which selects which @tech{mutation point} to use.
+All mutators accept a mutation index as well as the syntax to mutate, to select from the possibly multiple different mutations of the original syntax.
 
-Internally, this library uses a counter (called a @deftech{mutation counter}) to keep track of @tech{mutation point}s as it traverses a program.
-Every mutator consumes a counter and produces an updated counter along with its possibly-mutated result syntax.
-The counter (along with the @tech{mutation index}) provides the mechanism to decide whether a particular @tech{mutation point} should be used or not:
-if a mutator is applied with a counter that is smaller than the mutation index, then that mutator's mutation point should be skipped and the counter incremented to record that a mutation point has been passed;
-when the counter is equal to the mutation index, then the mutation point has been selected and the mutation should be performed as well as incrementing the counter.
-Thus the counter is threaded through the program traversal and mutator applications.
+In the workflow of this library, you (the user) define one or more mutators (see @secref{definition}) and then hand them over to the library's syntax traversal engine to create a mutation engine (see @racket[build-mutation-engine]).
+The mutation engine is a function that accepts the syntax of a program and a @tech{mutation index}, and returns the mutant corresponding to the given index.
+(For a given program and engine, the mutation index serves as a sort of ID for a particular mutant.)
 
-Now we have all the pieces to define a mutator concretely.
-A mutator is a function of three arguments: a piece of syntax, a @tech{mutation index}, and the current @tech{mutation counter},
-and it returns two things: the possibly-mutated syntax, and the updated @tech{mutation counter}.
-Technically, the two results are wrapped in a @racket[mutated] struct.
-See @racket[mutator/c] for all the technical details to the definition, but this is the core idea.
+@subsection{A full example}
 
-To alleviate the burden of keeping track of the @tech{mutation index} and @tech{mutation counter}, this library provides different tiers of interface to defining mutators that abstract over that accounting.
+This example illustrates using the high level apis to define simple mutators and build a mutation engine.
+
+@(define full-example-eval (new-eval))
+
+@(define-simple-macro (examples-with-the-right-indentation #:eval eval es ...)
+   (begin (racketblock #:escape _escape_ es ...)
+          (examples #:eval eval #:hidden es ...)))
+
+@examples-with-the-right-indentation[#:eval full-example-eval
+(require syntax/parse
+	 mutate
+	 mutate/quick
+	 racket/stream)
+
+(define program-mutations
+  (build-mutation-engine
+   #:mutators
+   (define-simple-mutator (if-swap stx)
+     #:pattern ({~literal if} cond t e)
+     #'(if cond e t))
+   (define-constant-mutator (constant-swap v)
+     [(? number?) #:-> (- v)])
+   #:syntax-only
+   #:streaming
+   #:module-mutator))
+
+(define program-to-mutate
+  #'(module test-program racket
+      (#%module-begin
+       (require "a.rkt")
+       (define x (if (yes?) 0 42))
+       (define y (if (negative? x)
+                     "negative!"
+                     (if (zero? x)
+                         "zero!"
+                         "positive!")))
+       (displayln y))))
+]
+
+@examples[#:eval full-example-eval #:label #f
+(map syntax->datum (stream->list (program-mutations program-to-mutate)))
+]
+
+@; @racketresultblock[
+@; '(((require "a.rkt")
+@;    (define x (if (yes?) 42 0))
+@;    (define y (if (negative? x) "negative!" (if (zero? x) "zero!" "positive!")))
+@;    (displayln y))
+@;   ((require "a.rkt")
+@;    (define x (if (yes?) 0 -42))
+@;    (define y (if (negative? x) "negative!" (if (zero? x) "zero!" "positive!")))
+@;    (displayln y))
+@;   ((require "a.rkt")
+@;    (define x (if (yes?) 0 42))
+@;    (define y (if (negative? x) (if (zero? x) "zero!" "positive!") "negative!"))
+@;    (displayln y))
+@;   ((require "a.rkt")
+@;    (define x (if (yes?) 0 42))
+@;    (define y (if (negative? x) "negative!" (if (zero? x) "positive!" "zero!")))
+@;    (displayln y)))
+@; ]
+
+
+@subsection{The apis of this library}
+This library provides three different tiers of interface to defining mutators that provide different levels of abstraction.
 @itemlist[
-@item{The highest level are the mutator definition forms in the next section, @secref{definition}, which support defining mutators with simple patterns and should suffice for most common mutators.}
-@item{For more complex mutators, the next tier (in @secref{procedural-api}) provides an api for performing mutations and threading the @tech{mutation counter}. The api lets mutators be defined in a style where the implementation simply applies all possible mutations to a piece of syntax, and the internals of the api cooperate to select the right one.}
-@item{The final tier (in @secref{composition}) provides a small combinator-like language for creating mutators out of other mutators (or plain functions), and for manipulating mutators.}
+@item{The @secref{high-level} offers pattern-based mutator definition forms and a convenient syntax for building a mutation engine in one step. This api should suffice for most common mutators.}
+@item{For more complex mutators, the @secref{procedural-api} provides a low-level api for defining complex mutators that need fine-grained control of how to perform mutations. }
+@item{Finally, the @secref{composition} provides a small combinator-like language for creating mutators out of other mutators (or plain functions) and otherwise manipulating mutators.}
 ]
 
 
-@subsection[#:tag "big-picture-usage"]{Using mutators to mutate programs}
-The perspective on mutation described in the previous section (and embodied in this library) lends itself to the following style of creating mutators.
-
-First, one defines @deftech{simple mutator}s, each of which succinctly describes a single mutation by only considering the outermost shape of a piece of syntax.
-In other words, simple mutators need only "do the right thing" when given directly a piece of syntax that they can mutate; they do not seek out (ie traverse to find) sub-parts of the syntax that could be mutated.
-
-With one or more simple mutators in hand, one combines them all together (with @racket[compose-mutators]) and uses the resulting mutator to create an @deftech{expression mutator} (with @racket[make-expr-mutator]).
-The expression mutator traverses the syntax it receives, searching for @tech{mutation points} for the simple mutator(s) it was created with.
-In other words, @racket[make-expr-mutator] lifts a simple mutator from mutating single expressions to mutating expressions including all of their sub-expressions.
-
-Finally, one can use an expression mutator to create a @deftech{program mutator} (with @racket[make-program-mutator]).
-The program mutator traverses a whole program / module based on a notion of top level forms, deciding which top level forms to consider for mutation, and communicating to its caller additional information about which top level form is selected for mutation by a given @tech{mutation index} -- or raising an error if the index exceeds the maximum possible for a program.
-
-
-@subsection[#:tag "literature"]{The mutation literature}
-For a detailed overview of the idea of mutation and how it is used in the literature, see this survey paper:
-@para{Yue Jia and Mark Harman. 2011. An analysis and survey of the development of mutation testing. IEEE transactions on software engineering 37, 5 (2011), 649-678.}
-
-The core ideas of mutation originate in these papers:
-@itemlist[
-@item{Richard J Lipton. 1971. Fault diagnosis of computer programs.}
-@item{Richard A. DeMillo, Richard J. Lipton, and Frederick G. Sayward. 1978. Hints on test data selection: Help for the practicing programmer. Computer 11, 4 (1978), 34-41.}
-@item{Richard A. DeMillo, Dana S. Guindi, Kim King, Mike M. McCracken, and Jefferson A. Offutt. 1988. An extended overview of the Mothra software testing environment. In Proceedings of the Second Workshop on Software Testing, Verification, and Analysis. IEEE, New York, NY, 142-151.}
-]
-
-
-@section{Mutators}
+@section[#:tag "high-level"]{High level mutator api}
 @subsection[#:tag "definition"]{Defining mutators}
 @defmodule[mutate/define @; #:multi (mutate )
 ]
@@ -159,7 +203,7 @@ If provided, @racket[guard-expr] guards the application of the mutator (evaluati
 
 The @racket[body] forms must produce the mutated syntax.
 
-@examples[#:label @para{Example: (The two @tt{0}s are the @tech{mutation index} and @tech{mutation counter} respectively; see @secref{concepts}.)}
+@examples[#:label @para{Example: (The two @tt{0}s are the @tech{mutation index} and @tech{mutation counter} respectively. For the purpose of most examples, the latter can be ignored; see @secref{concepts} and @secref{procedural-api} for details about each, respectively.)}
 (define-simple-mutator (if-swap stx)
   #:pattern ({~literal if} c t e)
   #'(if c e t))
@@ -222,6 +266,87 @@ Each matching @racket[value-swap-spec] is tried in turn, so they may overlap.
 (number-constant-swap #'0 1 0)]
 }
 
+@subsection{Building a mutation engine from individual mutators}
+@defmodule[mutate/quick]
+
+@defform[
+(build-mutation-engine
+  #:mutators
+  mutator-definition ...
+
+  result-type-kw
+
+  maybe-selector ...
+  option ...)
+#:grammar [(maybe-selector (code:line)
+                           (code:line #:expression-selector expr-selector)
+			   (code:line #:top-level-selector top-level-selector))
+           (result-type-kw (code:line #:syntax-only)
+                           (code:line #:with-mutated-id))
+	   (option (code:line #:module-mutator)
+                   (code:line #:streaming))]
+]{
+Builds and returns a mutation engine (a function to mutate program syntax) from the mutators defined by the enclosed @racket[mutator-definition]s (defined with the forms in the preceding section @secref{definition}).
+
+The kind of results produced by the engine must be specified with either @racket[#:syntax-only] or @racket[#:with-mutated-id].
+In the first case, the engine built returns only the syntax of the mutant program when applied.
+In the second case, the engine also returns an identifier indicating the top-level form that was mutated, in addition to the mutant syntax, wrapped up in a @racket[mutated-program] struct.
+
+Optionally, specify an expression selector to control how expressions are traversed, and a top-level selector to control which top level forms are considered for mutation and how.
+See @racket[make-expr-mutator] and @racket[make-program-mutator], respectively, for details.
+
+The @racket[#:module-mutator] keyword makes the resulting engine mutate module forms with the shape @verbatim{(module name lang (#%module-begin top-level-form ...))};
+without it, the engine treats its input program as a sequence of top level forms.
+
+The @racket[#:streaming] keyword selects the interface of the resulting engine:
+when supplied, the resulting engine produces a stream of all mutants, where each one's @tech{mutation index} corresponds to its position in the stream.
+It has the following interface (assuming for illustration that the choice above is fixed to @racket[#:syntax-only]):
+
+@racketblock[(syntax? . -> . (stream/c syntax?))]
+
+Otherwise (when @racket[#:streaming] is not supplied), the resulting engine has the interface:
+
+@racketblock[(syntax? natural? . -> . (or/c syntax? #f))]
+
+Where the second argument is the mutation index to select.
+
+}
+
+@section[#:tag "procedural-api"]{Low-level mutator tools}
+This section of the library offers a low-level interface to defining mutators.
+This interface requires you (the programmer) to handle an extra piece of information to keep track of @tech{mutation point}s during traversal:
+
+Internally, this library uses a counter (called a @deftech{mutation counter}) to keep track of the @tech{mutation point}s found as it traverses a program.
+Every mutator consumes a counter and produces an updated counter along with its possibly-mutated result syntax.
+The counter (along with the @tech{mutation index}) provides the mechanism to decide whether a particular @tech{mutation point} should be used or not:
+if a mutator is applied with a counter that is smaller than the mutation index, then that mutator's mutation point should be skipped and the counter incremented to record that a mutation point has been passed;
+when the counter is equal to the mutation index, then the mutation point has been selected and the mutation should be performed as well as incrementing the counter.
+Thus the counter is threaded through the program traversal and mutator applications.
+
+With the @tech{mutation counter}, we have all the pieces to fully define what consistutes a mutator concretely.
+A mutator is a function of three arguments: a piece of syntax, a @tech{mutation index}, and the current @tech{mutation counter},
+and it returns two things: the possibly-mutated syntax, and the updated @tech{mutation counter}.
+Technically, the two results are wrapped in a @racket[mutated] struct.
+See @racket[mutator/c] for all the technical details to the definition, but this is the core idea.
+
+
+The low level mutator api also offers more control over how mutators come together to build a mutation engine:
+
+With one or more simple mutators in hand, you can combine them all together (with @racket[compose-mutators]) and uses the resulting mutator to create an @deftech{expression mutator} (with @racket[make-expr-mutator]).
+The expression mutator traverses the syntax it receives, searching for @tech{mutation points} for the simple mutator(s) it was created with.
+In other words, @racket[make-expr-mutator] lifts a simple mutator from mutating single expressions to mutating expressions including all of their sub-expressions.
+
+Finally, you can use an expression mutator to create a @deftech{program mutator} (with @racket[make-program-mutator]).
+The program mutator traverses a whole program / module based on a notion of top level forms, deciding which top level forms to consider for mutation, and communicating to its caller additional information about which top level form is selected for mutation by a given @tech{mutation index} -- or raising an error if the index exceeds the maximum possible for a program.
+The default program mutator probably returns more information than you need, so you can use the transformers starting with @racket[without-counter] to simplify its results.
+
+
+
+
+@subsection{Defining low-level mutators}
+@defmodule[mutate/define @; #:multi (mutate )
+]
+
 @defform[
 (define-mutator (id stx-id mutation-index-id counter-id) #:type type-expr
   body ...)
@@ -229,7 +354,7 @@ Each matching @racket[value-swap-spec] is tried in turn, so they may overlap.
 Defines a general-purpose mutator accepting first the syntax to mutate, then the @tech{mutation index}, and finally the current @tech{mutation counter}.
 
 Unlike the simpler mutator definition forms above, the @racket[body] of the mutator should produce a @racket[mutated] value rather than plain syntax.
-The result should be a mutated version of the syntax received, produced with the procedural mutator tools in @secref{procedural-api}.
+The result should be a mutated version of the syntax received, produced with the low-level mutator tools in @secref{procedural-api}.
 
 Usually this form is only necessary for complex mutators, and even then most of the time you will be better off building such a mutator out of simpler pieces defined with the above forms and combined together with @racket[compose-mutators].
 One common exception is mutators for which the number of possible mutations depends on the shape of the syntax itself;
@@ -266,8 +391,7 @@ The easiest way to produce a mutator is by using one of the above mutator defini
 }
 
 
-
-@subsection[#:tag "procedural-api"]{Procedural mutator tools}
+@subsection{Low-level mutation interface}
 @defmodule[mutate/primitives]
 
 @defproc[(maybe-mutate [original syntax?] [new syntax?] [mutation-index mutation-index?] [counter counter?]
@@ -465,7 +589,7 @@ If not provided, @racket[type] defaults to the type of the mutator in which @rac
 }
 
 @defproc[(make-stream-mutator [make-stream (syntax? . -> . (stream/c syntax?))]
-			      [#:type type string?])
+			      [#:type type string? #f])
 	 mutator/c]{
 Creates a mutator that draws syntax transformations from a stream of such transformations produced by @racket[make-stream].
 The resulting mutator maps the sequence of mutations produced by @racket[transformer] to distinct @tech{mutation point}s on the same piece of syntax.
@@ -536,16 +660,15 @@ A mutator that does nothing to its argument.
 
 
 
-@section[#:tag "traversal"]{Expression and program mutators: syntax traversal}
+@subsection[#:tag "traversal"]{Expression and program mutators: syntax traversal}
 @defmodule[mutate/program]
 
-@subsection{Expression mutators}
+@subsubsection{Expression mutators}
 
 @(define expr-mutator-eval (new-eval))
 
 @defproc[(make-expr-mutator [mutator mutator/c] [#:select select-expr expression-selector/c select-any-expr]) mutator/c]{
-Creates an @tech{expression mutator} out of a @tech{simple mutator} by considering not only the top level of a piece of syntax for mutation, but also traversing into the syntax to consider sub-expressions for mutation.
-See @secref{big-picture-usage} for details.
+Creates an @tech{expression mutator} out of a @tech{mutator} by considering not only the top level of a piece of syntax for mutation, but also traversing into the syntax to consider sub-expressions for mutation.
 
 @racket[select-expr] selects which expressions to traverse into for discovering @tech{mutation point}s;
 see @racket[expression-selector/c].
@@ -643,18 +766,20 @@ Expression selectors are functions that, provided the syntax of an expression, r
 The expression selector that selects everything.
 }
 
-@subsection{Program mutators}
+@subsubsection{Program mutators}
 @defproc[(make-program-mutator [mutator mutator/c]
 			       [select top-level-selector/c select-all])
-	 ({syntax? mutation-index?} {counter?} . ->* . (mutated/c mutated-program?))]{
+	 ({syntax? mutation-index?} {counter?} . ->* . (or/c (mutated/c mutated-program?)
+	 	   		    	       	       	     #f))]{
 Creates a full @tech{program mutator} out of a @racket[mutator] (which is usually an @tech{expression mutator} produced by @racket[make-expr-mutator]).
 
 Similar to @racket[make-expr-mutator], @racket[select] selects top level expressions to consider for mutation and traversal.
 
 The resulting program mutator expects a syntax-list of top level forms of the program; i.e. a program with the shape @racket[#'[top-level-form ...]].
+(But see @racket[program-mutator->module-mutator].)
 It returns a @racket[mutated-program], which contains the syntax of the mutated program and an identifier for the top level form which was mutated (as produced by @racket[select], see @racket[top-level-selector/c] for details).
 
-If the program mutator is called with a mutation index that is larger than the total number of @tech{mutation points}, it raises a @racket[mutation-index-exception?].
+If the program mutator is called with a mutation index that is larger than the total number of @tech{mutation points}, it returns @racket[#f].
 
 @examples[#:eval expr-mutator-eval
 (define mutate-program
@@ -674,17 +799,22 @@ If the program mutator is called with a mutation index that is larger than the t
 		   (define x 5)
 		   (define y (+ x 1))]
 		2)
-(with-handlers ([mutation-index-exception? (λ _ 'out-of-mutants)])
-  (mutate-program #'[(provide x y)
-	             (displayln 0)
-		     (define x 5)
-		     (define y (+ x 1))]
-		  3))
-]
-}
+(mutate-program #'[(provide x y)
+		   (displayln 0)
+		   (define x 5)
+		   (define y (+ x 1))]
+		3)
 
-@defproc[(mutation-index-exception? [v any/c]) boolean?]{
-Recognizes exceptions thrown by @tech{program mutator}s when called with a mutation index that exceeds the total number of @tech{mutation points} in the program.
+(code:comment "with selector")
+(define mutate-program-defines
+  (make-program-mutator (make-expr-mutator increment-integer-consts)
+  			select-define-body))
+(mutate-program-defines #'[(provide x y)
+			   (displayln 0)
+			   (define x 5)
+			   (define y (+ x 1))]
+			0)
+]
 }
 
 @defproc[(without-counter [program-mutator ({syntax? mutation-index?}
@@ -713,6 +843,24 @@ Transforms a @tech{program mutator} returned by @racket[make-program-mutator] to
          ({syntax? mutation-index?} {counter?} . ->* . syntax?)]{
 Similar to @racket[without-counter], transforms a @tech{program mutator} returned by @racket[make-program-mutator] to strip both the @racket[mutated] and @racket[mutated-program] wrappers from its results, so that it produces only syntax.
 }
+
+@defproc[(program-mutator->module-mutator [program-mutator ({syntax? mutation-index?}
+							    {counter?}
+							    . ->* .
+							    any/c)])
+         ({syntax? mutation-index?} {counter?} . ->* . any/c)]{
+Transforms a @tech{program mutator} to mutate top level forms inside of a `module` form, rather than expecting the "program" to be directly a sequence of top level forms.
+}
+
+@defproc[(program-mutator->stream-builder [program-mutator ({syntax? mutation-index?}
+							    {counter?}
+							    . ->* .
+							    any/c)])
+         (syntax? . ->* . (stream/c any/c))]{
+Transforms a @tech{program mutator} to produce a stream of all possible mutants, ordered by mutation point, instead of returning a single mutant selected by a @tech{mutation index}.
+}
+
+
 
 @defstruct*[mutated-program ([stx syntax?] [mutated-id any/c]) #:transparent]{
 The wrapper of mutated program syntax, returned by @tech{program mutator}s, which carries the identifier of the top level form mutated alongside the mutated program syntax.
@@ -761,12 +909,11 @@ Top level selectors are functions that, provided the syntax of a top level form,
 		   (define x 5)
 		   (define y (+ x 1))]
 		1)
-(with-handlers ([mutation-index-exception? (λ _ 'out-of-mutants)])
-  (mutate-program #'[(provide x y)
-	             (displayln 0)
-		     (define x 5)
-		     (define y (+ x 1))]
-		  2))
+(mutate-program #'[(provide x y)
+		   (displayln 0)
+		   (define x 5)
+		   (define y (+ x 1))]
+		2)
 ]
 }
 
@@ -796,3 +943,14 @@ Since all mutators boil down to applications of @racket[maybe-mutate], the @rack
 
 @defthing[#:kind "logger" mutate-logger logger?]{}
 
+
+@section[#:tag "literature"]{The mutation literature}
+For a detailed overview of the idea of mutation that informs the design of this library, and how it is used in the literature, see this survey paper:
+@para{Yue Jia and Mark Harman. 2011. An analysis and survey of the development of mutation testing. IEEE transactions on software engineering 37, 5 (2011), 649-678.}
+
+The core ideas of mutation originate in these papers:
+@itemlist[
+@item{Richard J Lipton. 1971. Fault diagnosis of computer programs.}
+@item{Richard A. DeMillo, Richard J. Lipton, and Frederick G. Sayward. 1978. Hints on test data selection: Help for the practicing programmer. Computer 11, 4 (1978), 34-41.}
+@item{Richard A. DeMillo, Dana S. Guindi, Kim King, Mike M. McCracken, and Jefferson A. Offutt. 1988. An extended overview of the Mothra software testing environment. In Proceedings of the Second Workshop on Software Testing, Verification, and Analysis. IEEE, New York, NY, 142-151.}
+]

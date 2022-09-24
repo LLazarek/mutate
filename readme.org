@@ -62,3 +62,10 @@ The same code is also in =full-example.rkt=.
 
 ** TODO Add a program mutator wrapper that handles `(module ...)` forms directly
 
+** DONE Add an overall DWIM macro that goes straight from mutators \to program-mutator
+
+** TODO Add support for reporting statistics about number of mutants, distribution of mutators triggering, etc
+This can even include visualization support.
+
+** DONE mutation-index-exception should be a substruct of exn:fail?, or perhaps return a sentinel value instead
+
