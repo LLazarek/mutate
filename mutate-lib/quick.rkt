@@ -1,12 +1,14 @@
-#lang at-exp racket
+#lang at-exp racket/base
 
 (provide build-mutation-engine)
 
-(require syntax/parse/define
-         (for-syntax syntax/parse
-                     syntax/parse/lib/function-header
+(require (for-syntax racket/base
+                     racket/format
                      syntax/contract
-                     racket/format)
+                     syntax/parse/lib/function-header)
+         racket/contract/base
+         racket/format
+         syntax/parse/define
          "define.rkt"
          "program.rkt")
 
