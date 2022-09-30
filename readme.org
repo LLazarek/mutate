@@ -21,51 +21,63 @@ The same code is also in =full-example.rkt=.
 #lang racket
 
 (require syntax/parse
-         mutate/define
-         mutate/program)
+         "../main.rkt"
+         "../quick.rkt")
 
-(define-simple-mutator (if-swap stx)
-  #:pattern ({~literal if} cond t e)
-  #'(if cond e t))
+(define program-mutations
+  (build-mutation-engine
+   #:mutators
+   (define-simple-mutator (if-swap stx)
+     #:pattern ({~literal if} cond t e)
+     #:when (list? (syntax->datum #'cond))
+     #'(if cond e t))
+   (define-constant-mutator (constant-swap v)
+     [(? number?) #:-> (- v)])
+   #:syntax-only
+   #:streaming
+   #:module-mutator))
 
-(define-constant-mutator (constant-swap v)
-  [(? number?) #:-> (- v)])
-
-(define active-mutators (list if-swap
-                              constant-swap))
-
-(define combined-active-mutators (apply compose-mutators active-mutators))
-(define mutate-expr (make-expr-mutator combined-active-mutators))
-(define mutate-program (make-program-mutator mutate-expr))
-(define mutate-program-syntax (syntax-only mutate-program))
-
-(define program-to-mutate #'{(require "a.rkt")
-                             (define x (if (yes?) 0 42))
-                             (define y (if (negative? x)
-                                           "negative!"
-                                           (if (zero? x)
-                                               "zero!"
-                                               "positive!")))
-                             (displayln y)})
-(with-handlers ([mutation-index-exception? (λ _ (displayln 'done!))])
-  (for ([i (in-naturals)])
-    (displayln (list i (syntax->datum (mutate-program-syntax program-to-mutate i))))))
-; =>
-;; (0 ((require a.rkt) (define x (if (yes?) 42 0)) (define y (if (negative? x) negative! (if (zero? x) zero! positive!))) (displayln y)))
-;; (1 ((require a.rkt) (define x (if (yes?) 0 -42)) (define y (if (negative? x) negative! (if (zero? x) zero! positive!))) (displayln y)))
-;; (2 ((require a.rkt) (define x (if (yes?) 0 42)) (define y (if (negative? x) (if (zero? x) zero! positive!) negative!)) (displayln y)))
-;; (3 ((require a.rkt) (define x (if (yes?) 0 42)) (define y (if (negative? x) negative! (if (zero? x) positive! zero!))) (displayln y)))
-;; done!
+(define program-to-mutate
+  #'(module test-program racket
+      (#%module-begin
+       (require "a.rkt")
+       (define x (if (yes?) 0 42))
+       (define y (if (negative? x)
+                     "negative!"
+                     (if (zero? x)
+                         "zero!"
+                         "positive!")))
+       (displayln y))))
+(map syntax->datum
+     (stream->list (program-mutations program-to-mutate)))
+;; =>
+#;'((module test-program racket
+      (#%module-begin
+       (require "a.rkt")
+       (define x (if (yes?) 42 0))
+       (define y (if (negative? x) "negative!" (if (zero? x) "zero!" "positive!")))
+       (displayln y)))
+    (module test-program racket
+      (#%module-begin
+       (require "a.rkt")
+       (define x (if (yes?) 0 -42))
+       (define y (if (negative? x) "negative!" (if (zero? x) "zero!" "positive!")))
+       (displayln y)))
+    (module test-program racket
+      (#%module-begin
+       (require "a.rkt")
+       (define x (if (yes?) 0 42))
+       (define y (if (negative? x) (if (zero? x) "zero!" "positive!") "negative!"))
+       (displayln y)))
+    (module test-program racket
+      (#%module-begin
+       (require "a.rkt")
+       (define x (if (yes?) 0 42))
+       (define y (if (negative? x) "negative!" (if (zero? x) "positive!" "zero!")))
+       (displayln y))))
 #+END_SRC
 
 * Todos
-
-** TODO Add a program mutator wrapper that handles `(module ...)` forms directly
-
-** DONE Add an overall DWIM macro that goes straight from mutators \to program-mutator
-
 ** TODO Add support for reporting statistics about number of mutants, distribution of mutators triggering, etc
 This can even include visualization support.
-
-** DONE mutation-index-exception should be a substruct of exn:fail?, or perhaps return a sentinel value instead
 
