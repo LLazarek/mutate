@@ -10,9 +10,11 @@
 (require racket/format
          racket/list
          racket/pretty
+
          ruinit
          ruinit/diff/diff
-         "mutated.rkt")
+
+         mutate/private/mutated)
 
 (define (programs-equal? a b)
   (equal? (syntax->datum a)

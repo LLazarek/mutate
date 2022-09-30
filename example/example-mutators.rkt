@@ -34,9 +34,8 @@
          racket/string
          syntax/parse
          syntax/id-set
-         "../main.rkt"
-         "../primitives.rkt"
-         "../define.rkt")
+         mutate
+         mutate/primitives)
 
 (define-id-mutator arithmetic-op-swap
   #:type "arithmetic-op-swap"
@@ -95,7 +94,7 @@
 (module+ test
   (require ruinit
            racket
-           "../testing-util.rkt")
+           "../mutate-test/tests/testing-util.rkt")
   (define mutate-datum (compose-mutators arithmetic-op-swap
                                          boolean-op-swap
                                          class-method-publicity-swap

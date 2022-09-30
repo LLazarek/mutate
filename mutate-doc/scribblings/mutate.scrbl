@@ -1,20 +1,18 @@
 #lang scribble/manual
 
 @(require #;racket
-          "../define.rkt"
-          "../program.rkt"
-          "../primitives.rkt"
-          "../testing-util.rkt"
+	  mutate/define
+	  mutate/program
+	  mutate/primitives
           (rename-in scribble/example [examples s/e:examples])
 	  syntax/parse/define
           (for-label racket
-                     "../define.rkt"
-                     "../program.rkt"
-                     "../primitives.rkt"
-                     "../testing-util.rkt")
+          mutate/define
+          mutate/program
+          mutate/primitives)
           (for-syntax racket/base))
 
-@(define new-eval (make-eval-factory '(syntax/parse racket/list mutate/define mutate/program mutate/primitives mutate/testing-util)))
+@(define new-eval (make-eval-factory '(syntax/parse racket/list mutate/define mutate/program mutate/primitives)))
 
 @(define-simple-macro (examples {~optional {~seq #:eval user-eval}} more ...)
    #:with eval-e (or (attribute user-eval) #'(new-eval))

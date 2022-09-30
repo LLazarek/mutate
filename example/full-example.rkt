@@ -1,7 +1,8 @@
 #lang racket
 
 (require syntax/parse
-         "../main.rkt")
+         mutate
+         mutate/program)
 
 (define-simple-mutator (if-swap stx)
   #:pattern ({~literal if} cond t e)

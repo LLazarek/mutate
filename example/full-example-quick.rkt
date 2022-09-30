@@ -1,8 +1,8 @@
 #lang racket
 
 (require syntax/parse
-         "../main.rkt"
-         "../quick.rkt")
+         mutate
+         mutate/quick)
 
 (define program-mutations
   (build-mutation-engine
