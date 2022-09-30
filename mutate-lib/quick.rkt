@@ -10,6 +10,7 @@
          racket/format
          syntax/parse/define
          "define.rkt"
+         "low-level.rkt"
          "program.rkt")
 
 (begin-for-syntax

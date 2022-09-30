@@ -1,8 +1,7 @@
 #lang racket
 
 (require syntax/parse
-         mutate
-         mutate/quick)
+         mutate)
 
 (define program-mutations
   (build-mutation-engine

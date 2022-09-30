@@ -2,7 +2,8 @@
 
 (require syntax/parse
          mutate
-         mutate/program)
+         mutate/traversal
+         mutate/low-level)
 
 (define-simple-mutator (if-swap stx)
   #:pattern ({~literal if} cond t e)

@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require "define.rkt"
-         "program.rkt")
+         "quick.rkt")
 
 (provide (all-from-out "define.rkt")
-         (all-from-out "program.rkt"))
+         (all-from-out "quick.rkt"))

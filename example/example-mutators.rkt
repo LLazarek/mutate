@@ -35,7 +35,7 @@
          syntax/parse
          syntax/id-set
          mutate
-         mutate/primitives)
+         mutate/low-level)
 
 (define-id-mutator arithmetic-op-swap
   #:type "arithmetic-op-swap"

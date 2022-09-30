@@ -1,18 +1,14 @@
 #lang scribble/manual
 
 @(require #;racket
-	  mutate/define
-	  mutate/program
-	  mutate/primitives
+	  mutate mutate/low-level mutate/traversal mutate/logger
           (rename-in scribble/example [examples s/e:examples])
 	  syntax/parse/define
           (for-label racket
-          mutate/define
-          mutate/program
-          mutate/primitives)
+          mutate mutate/low-level mutate/traversal mutate/logger)
           (for-syntax racket/base))
 
-@(define new-eval (make-eval-factory '(syntax/parse racket/list mutate/define mutate/program mutate/primitives)))
+@(define new-eval (make-eval-factory '(syntax/parse racket/list mutate/define mutate/quick mutate/low-level/define mutate/low-level/mutators mutate/low-level/primitives mutate/traversal mutate/logger)))
 
 @(define-simple-macro (examples {~optional {~seq #:eval user-eval}} more ...)
    #:with eval-e (or (attribute user-eval) #'(new-eval))
@@ -110,8 +106,7 @@ This example illustrates using the high level apis to define simple mutators and
 
 @examples-with-the-right-indentation[#:eval full-example-eval
 (require syntax/parse
-	 mutate
-	 mutate/quick
+	 mutate (code:comment "provides both mutate/define and mutate/quick")
 	 racket/stream)
 
 (define program-mutations
@@ -173,10 +168,9 @@ This library provides three different tiers of interface to defining mutators th
 
 
 @section[#:tag "high-level"]{High level mutator api}
-@subsection[#:tag "definition"]{Defining mutators}
-@defmodule[mutate/define @; #:multi (mutate )
-]
+@defmodule[mutate]
 
+@subsection[#:tag "definition"]{Defining mutators}
 The following forms define @tech{mutator}s (see @secref{concepts}).
 In addition to the basic model of a mutator as a function, every mutator has a @deftech{mutator type}: a string that names the mutator for logging purposes (see @secref{logging}).
 
@@ -266,8 +260,6 @@ Each matching @racket[value-swap-spec] is tried in turn, so they may overlap.
 }
 
 @subsection{Building a mutation engine from individual mutators}
-@defmodule[mutate/quick]
-
 @defform[
 (build-mutation-engine
   #:mutators
@@ -312,6 +304,8 @@ Where the second argument is the mutation index to select.
 }
 
 @section[#:tag "procedural-api"]{Low-level mutator tools}
+@defmodule[mutate/low-level]
+
 This section of the library offers a low-level interface to defining mutators.
 This interface requires you (the mutator designer) to handle an extra piece of information to keep track of @tech{mutation point}s during traversal:
 
@@ -346,8 +340,6 @@ The default program mutator probably returns more information than you need, so 
 
 
 @subsection{Defining low-level mutators}
-@defmodule[mutate/define @; #:multi (mutate )
-]
 
 @defform[
 (define-mutator (id stx-id mutation-index-id counter-id) #:type type-expr
@@ -394,7 +386,6 @@ The easiest way to produce a mutator is by using one of the above mutator defini
 
 
 @subsection[#:tag "mutation-tools"]{Low-level mutation interface}
-@defmodule[mutate/primitives]
 
 @defproc[(maybe-mutate [original syntax?] [new syntax?] [mutation-index mutation-index?] [counter counter?]
                        [#:equivalent? equivalent? (syntax? syntax? . -> . boolean?) syntax-equal?])
@@ -525,7 +516,6 @@ Since they're both just natural numbers, the value of these predicates is purely
 
 
 @subsection[#:tag "composition"]{Mutator combinators}
-@defmodule[mutate/define]
 
 The following procedures provide an api for creating mutators in a different way from the definition forms above, as well as manipulating mutators.
 
@@ -665,7 +655,7 @@ A mutator that does nothing to its argument.
 
 
 @subsection[#:tag "traversal"]{Expression and program mutators: syntax traversal}
-@defmodule[mutate/program]
+@defmodule[mutate/traversal]
 
 @subsubsection{Expression mutators}
 
@@ -700,8 +690,10 @@ This is useful for ensuring that only certain mutations can happen to a form, li
   (syntax-parse stx
     [({~literal if} cond t e)
      (code:comment "Guard below marks conditions so that sub-parts don't get considered for mutation.")
-     (code:comment "This avoids some obvious equivalent mutants, but may miss interesting ones (e.g. involving side effects in conditions).")
-     (code:comment "E.g. (if (not #t) a b) could be mutated by this mutator to (if (not (not #t)) a b),")
+     (code:comment "This avoids some obvious equivalent mutants, but may miss interesting ones")
+     (code:comment "(e.g. involving side effects in conditions).")
+     (code:comment "Example:")
+     (code:comment "(if (not #t) a b) could be mutated by this mutator to (if (not (not #t)) a b),")
      (code:comment "and by a constant swap mutator to (if (not #f) a b).")
      (code:comment "The mutation guard prevents the second mutation.")
      (mutated-do-single [negated-cond (maybe-mutate #'cond #'(not cond) mutation-index counter)]
@@ -933,7 +925,7 @@ Some top level selectors for common cases.
 
 
 @subsection[#:tag "logging"]{Logging: recovering the mutation type that causes a mutation}
-@defmodule[mutate/define]
+@defmodule[mutate/logger]
 
 @racket[maybe-mutate] logs a mutation message when it executes a mutation on the @racket[mutate-logger] (topic @tt{mutate}) at level @tt{info}.
 The message has a data payload which is a list of three elements:

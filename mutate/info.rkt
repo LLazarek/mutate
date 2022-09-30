@@ -1,6 +1,7 @@
 #lang info
 (define collection "mutate")
-(define deps '("mutate-lib"
+(define deps '("base"
+               "mutate-lib"
                "mutate-doc"))
 (define build-deps '())
 (define pkg-desc "Program mutation library")
