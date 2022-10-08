@@ -44,30 +44,23 @@
 
 (define (select-all stx)
   (define name (leftmost-identifier-in stx))
-  (match (syntax->list stx)
-    [(? list? stx/list)
-     (list stx/list
-           name
-           (λ (stxs/mutated)
-             (datum->syntax stx stxs/mutated)))]
-    [else
-     (list (list stx)
-           name
-           (match-lambda
-             [(list stx/datum/mutated)
-              stx/datum/mutated]
-             [a-bigger-list
-              (error 'select-all
-                     @~a{
-                         Mutation produced multiple stxs from one stx?
-                         Original: @stx
-                         Mutated: @a-bigger-list
-                         })]))]))
+  (list (list stx)
+        name
+        (match-lambda
+          [(list stx/datum/mutated)
+           stx/datum/mutated]
+          [a-bigger-list
+           (error 'select-all
+                  @~a{
+                      Mutation produced multiple stxs from one stx?
+                      Original: @stx
+                      Mutated: @a-bigger-list
+                      })])))
 
 (define (select-define/contract-body stx)
   (syntax-parse stx
     [def:contracted-definition
-      (define-values {to-mutate id reconstructor}
+      (match-define (list to-mutate id reconstructor)
         (select-define-body #'(define def.id/sig def.body ...)))
       (define (reconstruct-definition body-stxs/mutated)
         (syntax-parse (reconstructor body-stxs/mutated)
