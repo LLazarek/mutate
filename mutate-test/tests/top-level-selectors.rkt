@@ -21,6 +21,45 @@
     @~a{Mutated ids are different:}]
    [(test-reconstruct reconstruct)
     @~a{Reconstruction test failed:}]))
+
+(test-begin
+  #:name select-all
+  (test-selector select-all
+                 #'(define x 5)
+                 (list #'(define x 5))
+                 'define
+                 (λ (reconstruct)
+                   (test-stx=? (reconstruct (list #'(void)))
+                               #'(void))))
+  (test-selector select-all
+                 #'(require racket/function)
+                 (list #'(require racket/function))
+                 'require
+                 (λ (reconstruct)
+                   (test-stx=? (reconstruct (list #'(begin 42)))
+                               #'(begin 42)))))
+
+(test-begin
+  #:name select-define/contract-body
+  (test-selector select-define/contract-body
+                 #'(define/contract x (and/c number? positive?) 5)
+                 (list #'5)
+                 'x
+                 (λ (reconstruct)
+                   (test-stx=? (reconstruct (list #'42))
+                               #'(define/contract x (and/c number? positive?) 42))))
+  (test-selector select-define/contract-body
+                 #'(define/contract (f x)
+                     (-> (and/c number? positive?) any/c)
+                     5)
+                 (list #'(begin 5))
+                 'f
+                 (λ (reconstruct)
+                   (test-stx=? (reconstruct (list #'(begin 42)))
+                               #'(define/contract (f x)
+                                   (-> (and/c number? positive?) any/c)
+                                   42)))))
+
 (test-begin
   #:name select-define-body
   (test-selector select-define-body
@@ -37,6 +76,23 @@
                  (λ (reconstruct)
                    (test-stx=? (reconstruct (list #'(begin 42)))
                                #'(define (f x) 42)))))
+
+(test-begin
+  #:name select-any-define-named-form-body
+  (test-selector select-any-define-named-form-body
+                 #'(my-fancy-define x 5)
+                 (list #'5)
+                 'x
+                 (λ (reconstruct)
+                   (test-stx=? (reconstruct (list #'42))
+                               #'(my-fancy-define x 42))))
+  (test-selector select-any-define-named-form-body
+                 #'(my-fancy-define (f x) 5)
+                 (list #'5)
+                 'f
+                 (λ (reconstruct)
+                   (test-stx=? (reconstruct (list #'42))
+                               #'(my-fancy-define (f x) 42)))))
 
 (test-begin
   #:name select-type-annotations+define-body

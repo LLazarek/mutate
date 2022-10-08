@@ -130,7 +130,7 @@
   (ignore
    (define replace-head-of-exprs-with-0-and-prevent-recur
      (make-expr-mutator
-      (λ (stx mutation-index counter)
+      (λ (stx mutation-index [counter 0])
         (syntax-parse stx
           [(head . rest)
            (mutated-do-single

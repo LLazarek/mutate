@@ -15,7 +15,7 @@
          #'1
          #'(+ 1 2))
    mutate-in-sequence
-   (λ (stx mutation-index counter)
+   (λ (stx mutation-index [counter 0])
      (maybe-mutate stx
                    (syntax-parse stx
                      [_:number #'42]

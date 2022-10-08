@@ -11,7 +11,7 @@
          syntax/parse/define
          "define.rkt"
          "low-level.rkt"
-         "program.rkt")
+         "traversal.rkt")
 
 (begin-for-syntax
   (define-syntax-class mutator-definition

@@ -57,7 +57,7 @@
   (ignore
    (define a-compound-mutator
      (compose-mutators
-      (λ (x index counter)
+      (λ (x index [counter 0])
         (maybe-mutate x
                       #'surprise!
                       index

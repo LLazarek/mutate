@@ -45,19 +45,22 @@
 
 
 (define-test (test-mutator mutator orig-stx expected-stx
-                           [counter-index-offset 0])
-  (test-programs-equal? (mutated-stx (mutator orig-stx counter-index-offset 0))
+                           [counter-index-offset 0]
+                           [stx-extractor mutated-stx])
+  (test-programs-equal? (stx-extractor (mutator orig-stx counter-index-offset 0))
                         expected-stx))
 
 (define-test (test-mutator* mutator
                             orig-stx
-                            expected-stx-seq)
+                            expected-stx-seq
+                            [stx-extractor mutated-stx])
   (for/and/test ([expected-stx (in-list expected-stx-seq)]
                  [counter (in-naturals)])
                 (test-mutator mutator
                               orig-stx
                               expected-stx
-                              counter)))
+                              counter
+                              stx-extractor)))
 
 (define-test (test-mutation/in-seq orig-seq
                                    seq-mutator
