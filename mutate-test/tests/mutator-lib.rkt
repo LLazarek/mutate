@@ -94,13 +94,9 @@
   (test-mutator*
    mutate-from-permutations
    #'(a b c)
-   (list #'(c b a)
-         #'(b c a)
-         #'(c a b)
-         #'(a c b)
-         #'(b a c)
-         #'(a b c)
-         #'(a b c)))
+   (map (λ (s) (datum->syntax #f s))
+        (remove '(a b c) ;; maybe-mutate won't let this one through!
+                (sequence->list (in-permutations '(a b c))))))
   (ignore
    (define mutate-from-empty
      (make-stream-mutator (λ _ empty-stream))))
