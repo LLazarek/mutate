@@ -53,6 +53,25 @@
   (test-mutator* mutate-value #'x (list #'x)))
 
 (test-begin
+  #:name simple-mutator
+  (ignore (define-simple-mutator (if-swap stx)
+            #:pattern ({~datum if} test t e)
+            #'(if test e t)))
+  (test-mutator if-swap #'(not an if) #'(not an if))
+  (test-mutator if-swap #'(if #t 1 2) #'(if #t 2 1))
+
+  (ignore (define-simple-mutator (permute-args stx)
+            #:pattern ({~datum ->} arg ... result)
+            (for/stream ([args (in-permutations (attribute arg))])
+              #`(-> #,@args result))))
+  (test-mutator* permute-args
+                 #'(-> A B C D)
+                 (append (map (λ (s)
+                                #`(-> #,@(datum->syntax #f s) D))
+                              (sequence->list (in-permutations '(A B C))))
+                         (list #'(-> A B C D)))))
+
+(test-begin
   #:name apply-mutators
   (ignore
    (define a-compound-mutator

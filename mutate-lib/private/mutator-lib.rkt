@@ -266,12 +266,6 @@
 
 
 ;; See note about limitation of simple mutators above `make-guarded-mutator`
-;;
-;; Another limitation is that a mutator made with `define-simple-mutator` can only make
-;; one possible change to a piece of syntax.
-;;
-;; TODO: support making multiple possible changes by letting `body` produce a list of syntaxes
-;; representing a sequence of mutations.
 (define-simple-macro (define-simple-mutator (name:id stx-name:id)
                        {~optional {~seq #:type type}
                                   #:defaults ([type #'(~a 'name)])}
@@ -283,8 +277,10 @@
                            (syntax-parse stx-name
                              [pattern
                               {~? {~@ #:when guard}}
-                              (stream-cons (let () body ...)
-                                           empty-stream)]
+                              (define result (let () body ...))
+                              (if (stream? result)
+                                  result
+                                  (stream-cons result empty-stream))]
                              [_ empty-stream]))
                          #:type type)))
 

@@ -8,7 +8,7 @@
           mutate mutate/low-level mutate/traversal mutate/logger)
           (for-syntax racket/base))
 
-@(define new-eval (make-eval-factory '(syntax/parse racket/list mutate/define mutate/quick mutate/low-level/define mutate/low-level/mutators mutate/low-level/primitives mutate/traversal mutate/logger)))
+@(define new-eval (make-eval-factory '(syntax/parse racket/list mutate/define mutate/quick mutate/low-level/define mutate/low-level/mutators mutate/low-level/primitives mutate/traversal mutate/logger racket/stream)))
 
 @(define-simple-macro (examples {~optional {~seq #:eval user-eval}} more ...)
    #:with eval-e (or (attribute user-eval) #'(new-eval))
@@ -161,7 +161,7 @@ This example illustrates using the high level apis to define simple mutators and
 @subsection{The apis of this library}
 This library provides three different tiers of interface to defining mutators that provide different levels of abstraction.
 @itemlist[
-@item{The @secref{high-level} offers pattern-based mutator definition forms and a convenient syntax for building a mutation engine in one step. This api should suffice for most common mutators.}
+@item{The @secref{high-level} offers pattern-based mutator definition forms and a convenient syntax for building a mutation engine in one step. This api should suffice for most mutators.}
 @item{For more complex mutators, the @secref{procedural-api} provides a low-level api for defining complex mutators that need fine-grained control of how to perform mutations. }
 @item{Finally, the @secref{composition} provides a small combinator-like language for creating mutators out of other mutators (or plain functions) and otherwise manipulating mutators.}
 ]
@@ -194,7 +194,11 @@ If not provided, the type defaults to @racket[id] as a string.
 
 If provided, @racket[guard-expr] guards the application of the mutator (evaluating to @racket[#f] causes the mutation to be skipped). Pattern variables in @racket[syntax-parse-pattern] are bound in the scope of @racket[guard-expr].
 
-The @racket[body] forms must produce the mutated syntax.
+The @racket[body] forms must produce either
+@itemlist[
+@item{the mutated syntax, or}
+@item{a stream of mutated syntax objects. This is useful for mutators that can change the same piece of syntax in multiple ways.}
+]
 
 @examples[#:label @para{Example: (The @tt{0} is the @tech{mutation index}; see @secref{concepts}.)}
 (define-simple-mutator (if-swap stx)
@@ -202,7 +206,21 @@ The @racket[body] forms must produce the mutated syntax.
   #'(if c e t))
 
 (if-swap #'(if (< x 0) 0 (f x)) 0)
-(if-swap #'(not-an-if 42 (+ 2 3)) 0)]
+(if-swap #'(not-an-if 42 (+ 2 3)) 0)
+
+(code:line)
+
+(define-simple-mutator (permute-args stx)
+  #:pattern ({~datum ->} arg ... result)
+  (for/stream ([args (in-permutations (attribute arg))])
+    #`(-> #,@args result)))
+(permute-args #'(-> A B C D) 0)
+(permute-args #'(-> A B C D) 1)
+(permute-args #'(-> A B C D) 2)
+(permute-args #'(-> A B C D) 3)
+(code:comment "...")
+]
+
 }
 
 @defform[
@@ -351,10 +369,6 @@ Unlike the simpler mutator definition forms above, the @racket[body] of the muta
 The result should be a mutated version of the syntax received, produced with the low-level mutator tools in @secref{mutation-tools}.
 
 Usually this form is only necessary for complex mutators, and even then most of the time you will be better off building such a mutator out of simpler pieces defined with the above forms and combined together with @racket[compose-mutators].
-One common exception is mutators for which the number of possible mutations depends on the shape of the syntax itself;
-for example, a mutator that swaps every adjacent pair of expressions (as in the example below) cannot be defined in terms of the simpler forms.
-
-See also @racket[make-stream-mutator], which may provide a more convenient interface for defining such mutators.
 
 @examples[
 (define-mutator (rearrange-positional-exprs stx mutation-index counter)
