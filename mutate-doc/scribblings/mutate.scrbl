@@ -301,10 +301,10 @@ The kind of results produced by the engine must be specified with either @racket
 In the first case, the engine built returns only the syntax of the mutant program when applied.
 In the second case, the engine also returns an identifier indicating the top-level form that was mutated, in addition to the mutant syntax, wrapped up in a @racket[mutated-program] struct.
 
-Optionally, specify an expression selector to control how expressions are traversed, and a top-level selector to control which top level forms are considered for mutation and how.
-See @racket[make-expr-mutator] and @racket[make-program-mutator], respectively, for details.
+Optionally, specify an @tech{expression selector} to control how expressions are traversed, and a @tech{top-level selector} to control which top level forms are considered for mutation and how.
 
-The @racket[#:module-mutator] keyword makes the resulting engine mutate module forms with the shape @verbatim{(module name lang (#%module-begin top-level-form ...))};
+The @racket[#:module-mutator] keyword makes the resulting engine mutate module forms with the shape
+@verbatim{(module name lang (#%module-begin top-level-form ...))}
 without it, the engine treats its input program as a sequence of top level forms.
 
 The @racket[#:streaming] keyword selects the interface of the resulting engine:
@@ -738,9 +738,10 @@ A predicate recognizing @racket[mutation-guard]ed syntax.
 					   (list/c syntax?
 						   (syntax? . -> . syntax?)
 						   (listof (cons/c parameter? any/c)))))]{
-The contract for expression selectors provided to @racket[make-expr-mutator].
+The contract for expression selectors provided to @racket[make-expr-mutator] or @racket[build-mutation-engine].
 
-Expression selectors are functions that, provided the syntax of an expression, return either
+An @deftech{expression selector} is a function that controls which expressions are traversed to find @tech{mutation point}s.
+Specifically, it is a function that, provided the syntax of an expression, returns either
 @itemlist[
 @item{false, to indicate that the expression should not be considered for mutation or traversal, or}
 @item{a list of three things:
@@ -881,9 +882,10 @@ The wrapper of mutated program syntax, returned by @tech{program mutator}s, whic
                           	(list/c (listof syntax?)
                                 	any/c
                                 	((listof syntax?) . -> . syntax?))))]{
-The contract for top level selectors provided to @racket[make-program-mutator].
+The contract for top-level selectors provided to @racket[make-program-mutator] or @racket[build-mutation-engine].
 
-Top level selectors are functions that, provided the syntax of a top level form, return either
+A @deftech{top-level selector} is a function that controls which parts of top level forms are considered for mutation.
+Specifically, it is a function that, provided the syntax of a top level form, returns either
 @itemlist[
 @item{False, to indicate that the form should not be considered for mutation or traversal, or}
 @item{A list of three things:
