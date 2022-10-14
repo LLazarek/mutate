@@ -21,11 +21,12 @@
 @author[(author+email "Lukas Lazarek" "lukas.lazarek@eecs.northwestern.edu"
 #:obfuscate? #t)]
 
-
-
+@defmodule[mutate]
 
 A library for mutating s-expression program syntax.
 That is, systematically injecting possible bugs by making small syntactic modifications to a program.
+
+@table-of-contents[]
 
 @section{Prologue}
 @subsection[#:tag "concepts"]{Mutation concepts}
@@ -168,7 +169,6 @@ This library provides three different tiers of interface to defining mutators th
 
 
 @section[#:tag "high-level"]{High level mutator api}
-@defmodule[mutate]
 
 @subsection[#:tag "definition"]{Defining mutators}
 The following forms define @tech{mutator}s (see @secref{concepts}).

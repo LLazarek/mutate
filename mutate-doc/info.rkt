@@ -6,5 +6,5 @@
                      "mutate-lib"))
 (define pkg-desc "Program mutation library - docs")
 (define pkg-authors '(lukas))
-(define scribblings '(("scribblings/mutate.scrbl" ())))
+(define scribblings '(("scribblings/mutate.scrbl" (multi-page))))
 
