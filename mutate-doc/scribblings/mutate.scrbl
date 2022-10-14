@@ -938,7 +938,7 @@ Some top level selectors for common cases.
 @racket[select-all] simply selects the entirety of all top level forms.
 
 @racket[select-define-body] selects the body of @racket[define]s.
-In the case of the function shorthand, this selector makes the @tech{implicit begin} explicitly visible in the body expression it returns (and then removes it again during reconstruction).
+In the case of the function shorthand, this selector makes the implicit begin explicitly visible in the body expression it returns (and then removes it again during reconstruction).
 
 @racket[select-define/contract-body] is like @racket[select-define-body] but for @racket[define/contract].
 
