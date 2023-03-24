@@ -5,16 +5,21 @@
          test-mutator
          test-mutator*
          test-mutation/in-seq
-         test-failure-diff-programs?)
+         test-failure-diff-programs?
+         test-logged-mutation)
 
 (require racket/format
          racket/list
          racket/pretty
+         racket/match
 
          ruinit
          ruinit/diff/diff
 
-         mutate/private/mutated)
+         mutate/private/mutated
+
+         mutate/logger
+         racket/logging)
 
 (define (programs-equal? a b)
   (equal? (syntax->datum a)
@@ -87,3 +92,26 @@ Actual:
             index
             (pretty-printer expect)
             (pretty-printer ms)))))
+
+(define-test (test-logged-mutation mutator
+                                   orig-stx
+                                   expected-type
+                                   [counter-index-offset 0])
+  (define logged-instead #f)
+  (define ok? #f)
+  (with-intercepted-logging (match-lambda [(vector _
+                                                   _
+                                                   (list type
+                                                         (? syntax?)
+                                                         (? syntax?))
+                                                   _)
+                                           (if (equal? type expected-type)
+                                               (set! ok? #t)
+                                               (set! logged-instead type))]
+                                          [else (void)])
+    (λ _ (mutator orig-stx counter-index-offset 0))
+    #:logger mutate-logger
+    'info)
+  (unless ok?
+    (fail @~a{mutator logged type @~s[logged-instead] instead})))
+

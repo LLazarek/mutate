@@ -141,3 +141,35 @@
          #'7
          #'8
          #| ... |#)))
+
+(test-begin
+  #:name nesting-mutators
+  (ignore
+   (local-require mutate/low-level)
+   (define-mutator (drop-case->-cases stx mutation-index counter)
+     #:type "drop-case->-case"
+     (define-mutator (drop-case stx mutation-index counter)
+       #:type (current-mutator-type)
+       (maybe-mutate stx
+                     #'[]
+                     mutation-index
+                     counter))
+
+     (syntax-parse stx
+       [({~and arrow {~datum case->}}
+         case ...)
+        (mutated-do-single
+         [mutated-cases (mutate-in-sequence (syntax->list #'([case] ...))
+                                            mutation-index
+                                            counter
+                                            drop-case)]
+         #:return
+         (syntax-parse mutated-cases
+           [({~or* [case*] []} ...)
+            (syntax/loc stx
+              (arrow {~? case*} ...))]))]
+       [else
+        (no-mutation stx mutation-index counter)])))
+  (test-logged-mutation drop-case->-cases
+                        #'(case-> a b c)
+                        "drop-case->-case"))
