@@ -57,7 +57,7 @@
                                 mutator/c)]
           ;; Composes the given mutators into one which applies each of the
           ;; mutators *in the given order*
-          [compose-mutators (mutator/c mutator/c ... . -> . mutator/c)]
+          [compose-mutators (mutator/c ... . -> . mutator/c)]
           [no-mutation mutator/c])
 
          (except-out (struct-out mutator) mutator-type)

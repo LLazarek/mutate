@@ -552,8 +552,10 @@ Creates a contract for a dependent mutator with domain specified by @racket[dom-
 
 
 @(define simple-mutators-eval (new-eval))
-@defproc[(compose-mutators [mutator mutator/c] ...+) mutator/c]{
+@defproc[(compose-mutators [mutator mutator/c] ...) mutator/c]{
 Composes multiple mutators together into a single one, which applies each of the mutators in the given order.
+
+Given zero mutators, returns @racket[no-mutation].
 
 @examples[#:eval simple-mutators-eval
 (define-constant-mutator (increment-integer-consts v)

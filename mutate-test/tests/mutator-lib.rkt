@@ -101,7 +101,10 @@
                  (list #'surprise!
                        #'surprise-2!
                        #'(+ 42 3)
-                       #'(+ x 3))))
+                       #'(+ x 3)))
+  (test-mutator (compose-mutators)
+                #'(+ x 3)
+                #'(+ x 3)))
 
 (test-begin
   #:name make-stream-mutator
