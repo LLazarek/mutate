@@ -15,7 +15,7 @@
 
 (begin-for-syntax
   (define-syntax-class mutator-definition
-    #:description "a mutator definition"
+    #:description "a mutator definition or name"
     #:commit
     #:attributes [id]
     #:literals [define-id-mutator
@@ -31,7 +31,8 @@
               (id:id . _) . _))
     (pattern (define id:id . _))
     (pattern (define head:function-header . _)
-             #:with id #'head.name)))
+             #:with id #'head.name)
+    (pattern id:id)))
 
 (define mutator/c-first-order
   (flat-named-contract 'mutator/c-first-order

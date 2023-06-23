@@ -5,25 +5,28 @@
 (provide (contract-out
           [arithmetic-op-swap             mutator/c]
           [boolean-op-swap                mutator/c]
-          [class-method-publicity-swap    mutator/c]
-          [delete-super-new               mutator/c]
+          [comparison-op-swap             mutator/c]
+
+          [negate-conditionals            mutator/c]
+          [force-conditionals             mutator/c]
+          ;; [wrap-conditionals              mutator/c]
+
+          [replace-constants/type-level   mutator/c]
+          [replace-constants/similar      mutator/c]
+
+          [swap-arguments                 mutator/c]
+
+          [delete-begin-result-expr       mutator/c]
+          [begin-drop                     mutator/c]
+
           [data-accessor-swap             mutator/c]
           [nested-list-construction-swap  mutator/c]
 
-          [replace-constants/type-level   mutator/c]
-
-          [delete-begin-result-expr       mutator/c]
-          [negate-conditionals            mutator/c]
-          [force-conditionals             mutator/c]
-          [wrap-conditionals              mutator/c]
+          [class-method-publicity-swap    mutator/c]
+          [delete-super-new               mutator/c]
+          [add-extra-class-method         mutator/c]
           [replace-class-parent           mutator/c]
           [swap-class-initializers        mutator/c]
-          [swap-arguments                 mutator/c]
-          [add-extra-class-method         mutator/c]
-
-          [comparison-op-swap             mutator/c]
-          [replace-constants/similar      mutator/c]
-          [begin-drop                     mutator/c]
 
           [make-top-level-id-swap-mutator (dependent-mutator/c syntax?)]
           [make-method-id-swap-mutator    (dependent-mutator/c syntax?)]
@@ -82,7 +85,6 @@
   [append #:-> cons])
 
 (define-constant-mutator (replace-constants/type-level value)
-  #:type "constant-swap"
   ;; May mess with occurrence typing
   [(? boolean?)              #:-> (not value)]
 
@@ -475,7 +477,7 @@
                              (field a)
                              (define/public (foo x) x))))))
 
-(define-mutator (swap-class-initializers stx mutation-index counter)
+#;(define-mutator (swap-class-initializers stx mutation-index counter)
   #:type "class:initializer-swap"
   (syntax-parse stx
     [({~and {~or {~datum init-field}
@@ -518,59 +520,60 @@
                          [field-id other-field-stuff ... new-init-value] ...))]))]
     [else
      (no-mutation stx mutation-index counter)]))
+(define-simple-mutator (swap-class-initializers stx)
+  #:type "class:initializer-swap"
+  #:pattern {~or ({~and {~datum instantiate} instantiator}
+                  class-e
+                  (positional-initializer ...)
+                  {~and name-initializer [field-id:id other-field-stuff ... initial-value:expr]}
+                  ...)
+                 ({~and {~datum new} instantiator}
+                  class-e
+                  {~and name-initializer [field-id:id other-field-stuff ... initial-value:expr]}
+                  ...)}
+  (stream-append (for/stream ([swapped-positionals (in-swaps
+                                                    ;; if `stx` is a `new`, then this will
+                                                    ;; skip these swaps
+                                                    (or (attribute positional-initializer)
+                                                        '()))])
+                   (syntax-parse swapped-positionals
+                     [[p ...]
+                      (quasisyntax/loc stx
+                        (instantiator class-e
+                                      (p ...)
+                                      name-initializer ...))]))
+                 (for/stream ([swapped-values (in-swaps (attribute initial-value))])
+                   (syntax-parse swapped-values
+                     [[v ...]
+                      (quasisyntax/loc stx
+                        (instantiator class-e
+                                      {~? (positional-initializer ...)}
+                                      [field-id other-field-stuff ... v] ...))]))))
 
 (module+ test
   (test-begin
     #:name swap-class-initializers
-    (for/and/test
-     ([field-name (in-list (list #'field #'init-field))])
-     (extend-test-message
-      (test-mutator* swap-class-initializers
-                     #`(#,field-name
-                        mandatory-1
-                        [mandatory-2 : T2]
-                        [a 1]
-                        [b 2]
-                        [c 3]
-                        [d : T1 4]
-                        [e 5])
-                     (list #`(#,field-name
-                              mandatory-1
-                              [mandatory-2 : T2]
-                              [a 2]
-                              [b 1]
-                              [c 3]
-                              [d : T1 4]
-                              [e 5])
-                           #`(#,field-name
-                              mandatory-1
-                              [mandatory-2 : T2]
-                              [a 1]
-                              [b 2]
-                              [c 4]
-                              [d : T1 3]
-                              [e 5])
-                           #`(#,field-name
-                              mandatory-1
-                              [mandatory-2 : T2]
-                              [a 1]
-                              [b 2]
-                              [c 3]
-                              [d : T1 4]
-                              [e 5])))
-      @~a{Field: @field-name}))
-
     (test-mutator* swap-class-initializers
-                   #'(new my-class 42 [a 5] [b "hi"])
-                   (list #'(new my-class 42 [a "hi"] [b 5])
-                         #'(new my-class 42 [a 5] [b "hi"])))
+                   #'(new my-class [a 5] [b "hi"])
+                   (list #'(new my-class [a "hi"] [b 5])
+                         #'(new my-class [a 5] [b "hi"])))
     (test-mutator* swap-class-initializers
-                   #'(new my-class 42 33 [a 5] [b "hi"] [c 'not-this-one])
-                   (list #'(new my-class 42 33 [a "hi"] [b 5] [c 'not-this-one])
-                         #'(new my-class 42 33 [a 5] [b "hi"] [c 'not-this-one])))
+                   #'(instantiate my-class (42 'x) [a 5] [b "hi"])
+                   (list #'(instantiate my-class ('x 42) [a 5] [b "hi"])
+                         #'(instantiate my-class (42 'x) [a "hi"] [b 5])
+                         #'(instantiate my-class (42 'x) [a 5] [b "hi"])))
     (test-mutator* swap-class-initializers
-                   #'(new my-class 42 33 [a 5])
-                   (list #'(new my-class 42 33 [a 5])))))
+                   #'(instantiate my-class (42 33) [a 5])
+                   (list #'(instantiate my-class (33 42) [a 5])
+                         #'(instantiate my-class (42 33) [a 5])))
+    (test-mutator* swap-class-initializers
+                   #'(instantiate my-class (42 33))
+                   (list #'(instantiate my-class (33 42))
+                         #'(instantiate my-class (42 33))))
+    (test-mutator* swap-class-initializers
+                   #'(instantiate my-class () [a 42] [b 33])
+                   (list #'(instantiate my-class () [a 33] [b 42])
+                         #'(instantiate my-class () [a 42] [b 33])))))
 
 (define-simple-mutator (swap-arguments stx)
   #:pattern ({~and head {~not _:special-form}} e ...)
@@ -683,7 +686,13 @@
 (define top-level-id-swap-type "top-level-id-swap")
 (define-dependent-mutator (make-top-level-id-swap-mutator mod-stx)
   #:type top-level-id-swap-type
-  (define all-top-level-identifiers (top-level-definitions mod-stx))
+  (define all-top-level-identifiers
+    (syntax-parse mod-stx
+      [({~datum module} name lang
+         ({~datum #%module-begin}
+          top-level-e ...))
+       (top-level-definitions #'{top-level-e ...})]
+      [else (top-level-definitions mod-stx)]))
   (mutator (combined-id-list-swap-mutator all-top-level-identifiers top-level-id-swap-type)
            top-level-id-swap-type))
 

@@ -1,11 +1,13 @@
 #lang at-exp racket/base
 
-(provide base-type->Any
-         complex-type->Any
-         function-arg-swap
-         function-result-swap
-         struct-field-swap
-         class-field-swap)
+(require racket/contract)
+(provide (contract-out
+          [GTP-base-type->Any   mutator/c]
+          [complex-type->Any    mutator/c]
+          [function-arg-swap    mutator/c]
+          [function-result-swap mutator/c]
+          [struct-field-swap    mutator/c]
+          [class-field-swap     mutator/c]))
 
 (require mutate/define
          mutate/low-level
@@ -18,7 +20,7 @@
          "private/common.rkt")
 
 (define type:base-type-substitution "base-type->Any")
-(define-id-mutator base-type->Any
+(define-id-mutator GTP-base-type->Any
   #:type type:base-type-substitution
   [Real #:-> Any]
   [Integer #:-> Any]

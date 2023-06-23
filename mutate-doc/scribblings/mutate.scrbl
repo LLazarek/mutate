@@ -5,10 +5,12 @@
           (rename-in scribble/example [examples s/e:examples])
 	  syntax/parse/define
           (for-label racket
-          mutate mutate/low-level mutate/traversal mutate/logger)
+          mutate mutate/low-level mutate/traversal mutate/logger
+	  mutate/mutators/code
+	  mutate/mutators/type)
           (for-syntax racket/base))
 
-@(define new-eval (make-eval-factory '(syntax/parse racket/list mutate/define mutate/quick mutate/low-level/define mutate/low-level/mutators mutate/low-level/primitives mutate/traversal mutate/logger racket/stream)))
+@(define new-eval (make-eval-factory '(syntax/parse racket/list mutate/define mutate/quick mutate/low-level/define mutate/low-level/mutators mutate/low-level/primitives mutate/traversal mutate/logger racket/stream mutate/mutators/code mutate/mutators/type)))
 
 @(define-simple-macro (examples {~optional {~seq #:eval user-eval}} more ...)
    #:with eval-e (or (attribute user-eval) #'(new-eval))
@@ -114,7 +116,7 @@ This example illustrates using the high level apis to define simple mutators and
   (build-mutation-engine
    #:mutators
    (define-simple-mutator (if-swap stx)
-     #:pattern ({~literal if} cond t e)
+     #:pattern ({~datum if} cond t e)
      #'(if cond e t))
    (define-constant-mutator (constant-swap v)
      [(? number?) #:-> (- v)])
@@ -202,7 +204,7 @@ The @racket[body] forms must produce either
 
 @examples[#:label @para{Example: (The @tt{0} is the @tech{mutation index}; see @secref{concepts}.)}
 (define-simple-mutator (if-swap stx)
-  #:pattern ({~literal if} c t e)
+  #:pattern ({~datum if} c t e)
   #'(if c e t))
 
 (if-swap #'(if (< x 0) 0 (f x)) 0)
@@ -281,21 +283,21 @@ Each matching @racket[value-swap-spec] is tried in turn, so they may overlap.
 @defform[
 (build-mutation-engine
   #:mutators
-  mutator-definition ...
+  mutator-definition-or-name ...
 
   result-type-kw
 
   maybe-selector ...
   option ...)
-#:grammar [(maybe-selector (code:line)
+#:grammar [(result-type-kw (code:line #:syntax-only)
+                           (code:line #:with-mutated-id))
+           (maybe-selector (code:line)
                            (code:line #:expression-selector expr-selector)
 			   (code:line #:top-level-selector top-level-selector))
-           (result-type-kw (code:line #:syntax-only)
-                           (code:line #:with-mutated-id))
 	   (option (code:line #:module-mutator)
                    (code:line #:streaming))]
 ]{
-Builds and returns a mutation engine (a function to mutate program syntax) from the mutators defined by the enclosed @racket[mutator-definition]s (defined with the forms in the preceding section @secref{definition}).
+Builds and returns a mutation engine (a function to mutate program syntax) from the mutators defined by the enclosed @racket[mutator-definition]s (which are either definitions, uses of the forms in the preceding section @secref{definition}, or identifiers naming mutators).
 
 The kind of results produced by the engine must be specified with either @racket[#:syntax-only] or @racket[#:with-mutated-id].
 In the first case, the engine built returns only the syntax of the mutant program when applied.
@@ -589,9 +591,9 @@ If not provided, @racket[type] defaults to the type of the mutator in which @rac
 
 @examples[
 (define if-swap2
-  (make-guarded-mutator (syntax-parser [({~literal if} c t e) #t]
+  (make-guarded-mutator (syntax-parser [({~datum if} c t e) #t]
   		 		       [else #f])
-		        (syntax-parser [({~literal if} c t e) #'(if c e t)])))
+		        (syntax-parser [({~datum if} c t e) #'(if c e t)])))
 
 (if-swap2 #'(if (< x 0) 0 (f x)) 0 0)
 (if-swap2 #'(not-an-if 42 (+ 2 3)) 0 0)
@@ -704,7 +706,7 @@ This is useful for ensuring that only certain mutations can happen to a form, li
 @examples[
 (define-mutator (negate-if-cond-only stx mutation-index counter) #:type "negate-if-cond-only"
   (syntax-parse stx
-    [({~literal if} cond t e)
+    [({~datum if} cond t e)
      (code:comment "Guard below marks conditions so that sub-parts don't get considered for mutation.")
      (code:comment "This avoids some obvious equivalent mutants, but may miss interesting ones")
      (code:comment "(e.g. involving side effects in conditions).")
@@ -758,7 +760,7 @@ Specifically, it is a function that, provided the syntax of an expression, retur
 @examples[#:eval expr-mutator-eval
 (define ignore-begin-effect-exprs
   (syntax-parser
-    [({~literal begin} non-result-e ... result-e)
+    [({~datum begin} non-result-e ... result-e)
      (list #'result-e
            (λ (new-result-e) #`(begin non-result-e ... #,new-result-e))
 	   empty)]
@@ -903,7 +905,7 @@ Specifically, it is a function that, provided the syntax of a top level form, re
 (require syntax/parse/lib/function-header)
 (define (select-define-body-only stx)
   (syntax-parse stx
-    [({~literal define} {~or* plain-name:id sig:function-header} body ...)
+    [({~datum define} {~or* plain-name:id sig:function-header} body ...)
      (list (attribute body)
 	   (or (attribute plain-name) (attribute sig.name))
 	   (λ (mutated-body-stxs) #`(define {~? plain-name sig} #,@mutated-body-stxs)))]
@@ -983,3 +985,235 @@ The core ideas of mutation originate in these papers:
 @item{Richard A. DeMillo, Richard J. Lipton, and Frederick G. Sayward. 1978. Hints on test data selection: Help for the practicing programmer. Computer 11, 4 (1978), 34-41.}
 @item{Richard A. DeMillo, Dana S. Guindi, Kim King, Mike M. McCracken, and Jefferson A. Offutt. 1988. An extended overview of the Mothra software testing environment. In Proceedings of the Second Workshop on Software Testing, Verification, and Analysis. IEEE, New York, NY, 142-151.}
 ]
+
+
+
+@section{Pre-defined mutators}
+Two sets of pre-defined mutators are provided in a seperate package, @tt{mutate-mutators}, documented in the following sections.
+
+@subsection{Mutators that inject bugs in Racket code}
+All of these mutators operate on the basis of datums, i.e. surface syntax, not binding information.
+This is intentional, to allow them to be used on unexpanded @tt{#lang racket} code read from files.
+
+@defmodule[mutate/mutators/code]
+@deftogether[(
+@defthing[#:kind "mutator" arithmetic-op-swap mutator/c]
+@defthing[#:kind "mutator" boolean-op-swap mutator/c]
+@defthing[#:kind "mutator" comparison-op-swap mutator/c]
+)]{
+Swaps arithmetic, boolean, and comparison operators.
+
+@examples[
+(arithmetic-op-swap #'+ 0)
+(arithmetic-op-swap #'- 0)
+(arithmetic-op-swap #'* 0)
+(arithmetic-op-swap #'quotient 0)
+(arithmetic-op-swap #'modulo 0)
+(arithmetic-op-swap #'add1 0)
+(arithmetic-op-swap #'sub1 0)
+(boolean-op-swap #'and 0)
+(boolean-op-swap #'or 0)
+(comparison-op-swap #'< 0)
+(comparison-op-swap #'<= 0)
+(comparison-op-swap #'<= 1)
+(comparison-op-swap #'> 0)
+(comparison-op-swap #'>= 0)
+(comparison-op-swap #'>= 1)
+(comparison-op-swap #'= 0)
+(comparison-op-swap #'= 1)
+]
+}
+
+@deftogether[(
+@defthing[#:kind "mutator" negate-conditionals mutator/c]
+@defthing[#:kind "mutator" force-conditionals mutator/c]
+)]{
+@examples[
+(negate-conditionals #'(if (yes?) 0 1) 0)
+(force-conditionals #'(if (yes?) 0 1) 0)
+]
+}
+
+@deftogether[(
+@defthing[#:kind "mutator" replace-constants/type-level   mutator/c]
+@defthing[#:kind "mutator" replace-constants/similar      mutator/c]
+)]{
+@racket[replace-constants/type-level] swaps constants with other constants that may have a different type, potentially causing type errors.
+In contrast, @racket[replace-constants/similar] replaces constants with more similar constants, in order to minimize possible type errors.
+
+Since these two mutators overlap, they most likely shouldn't be used together (which would lead to duplicate mutants).
+
+They are defined as:
+@racketblock[
+(define-constant-mutator (replace-constants/type-level value)
+  ;; May mess with occurrence typing
+  [(? boolean?)              #:-> (not value)]
+
+  ;; Type generalization or subdivision swaps
+  [(? number?)               #:-> (- value)]
+  [(? integer?)              #:-> (exact->inexact value)]
+  [(and (? number?)
+        (? zero?))           #:-> 1]
+  [(and (? number?)
+        (? (negate zero?)))  #:-> 0]
+  [(? real?)                 #:-> (* 1+0.0i value)]
+
+  ;; Blatantly ill-typed swaps
+  [(? boolean?)              #:-> (if value 1 0)]
+  [(? number?)               #:-> #f]
+  [(? string?)               #:-> (string->bytes/utf-8 value)])
+
+(define-constant-mutator (replace-constants/similar v)
+  [1            #:-> 0]
+  [(? integer?) #:-> (add1 v)]
+  [(? number?)  #:-> (- v)]
+  [(? number?)  #:-> (- -1 v)])]
+}
+
+@defthing[#:kind "mutator" swap-arguments                 mutator/c]{
+Swaps pairs of argument-position s-expressions (i.e. all subexpressions after the first).
+
+@examples[
+(swap-arguments #'(f x 2 #t) 0)
+(swap-arguments #'(f x 2 #t) 1)
+(swap-arguments #'(f x 2 #t) 2)
+]
+}
+
+@deftogether[(
+@defthing[#:kind "mutator" delete-begin-result-expr       mutator/c]
+@defthing[#:kind "mutator" begin-drop                     mutator/c]
+)]{
+@racket[delete-begin-result-expr] deletes only the result expression from a begin, while @racket[begin-drop] sequentially deletes every expression in a begin.
+
+Since these two mutators overlap, they most likely shouldn't be used together (which would lead to duplicate mutants).
+
+@examples[
+(delete-begin-result-expr #'(begin (first!) (second!) 'ok) 0)
+(begin-drop #'(begin (first!) (second!) 'ok) 0)
+(begin-drop #'(begin (first!) (second!) 'ok) 1)
+(begin-drop #'(begin (first!) (second!) 'ok) 2)
+]
+}
+
+@deftogether[(
+@defthing[#:kind "mutator" data-accessor-swap             mutator/c]
+@defthing[#:kind "mutator" nested-list-construction-swap  mutator/c]
+)]{
+Swap @racket[car] and @racket[cdr] with each other, or replace @racket[append] with @racket[cons], respectively.
+}
+
+@deftogether[(
+@defthing[#:kind "mutator" class-method-publicity-swap    mutator/c]
+@defthing[#:kind "mutator" delete-super-new               mutator/c]
+@defthing[#:kind "mutator" add-extra-class-method         mutator/c]
+@defthing[#:kind "mutator" replace-class-parent           mutator/c]
+@defthing[#:kind "mutator" swap-class-initializers        mutator/c]
+)]{
+Several class-related mutators. The examples illustrate what they do.
+
+@examples[
+(class-method-publicity-swap #'define/public 0)
+(delete-super-new #'super-new 0)
+(add-extra-class-method #'(class object% (super-new) (define/public (m x) x)) 0)
+(replace-class-parent #'(class button% (super-new) (define/public (m x) x)) 0)
+(code:line)
+(swap-class-initializers #'(instantiate my-class (42 'x) [a 5] [b "hi"]) 0)
+(swap-class-initializers #'(instantiate my-class (42 'x) [a 5] [b "hi"]) 1)
+(swap-class-initializers #'(new my-class [a 5] [b "hi"] [c 'x]) 0)
+(swap-class-initializers #'(new my-class [a 5] [b "hi"] [c 'x]) 1)
+(swap-class-initializers #'(new my-class [a 5] [b "hi"] [c 'x]) 2)
+]
+}
+
+@deftogether[(
+@defthing[#:kind "mutator" make-top-level-id-swap-mutator (dependent-mutator/c syntax?)]
+@defthing[#:kind "mutator" make-method-id-swap-mutator    (dependent-mutator/c syntax?)]
+@defthing[#:kind "mutator" make-field-id-swap-mutator     (dependent-mutator/c syntax?)]
+)]{
+Identifier-swapping dependent mutators, which swap identifiers defined within the module supplied to create the mutator.
+
+@examples[
+(define tl-id-swap (make-top-level-id-swap-mutator #'(module test racket (#%module-begin (define x 5) (define y 10)))))
+(tl-id-swap #'x 0)
+(tl-id-swap #'y 0)
+(tl-id-swap #'not-x-or-y 0)
+(code:line)
+(define mtd-id-swap
+  (make-method-id-swap-mutator
+   #'(module test racket
+       (#%module-begin
+        (define c%
+          (class object%
+            (super-new)
+            (define/public (foo x) x)
+            (define/public (bar y) 42)
+            (define/public (m z) 0)))))))
+(mtd-id-swap #'foo 0)
+(mtd-id-swap #'foo 1)
+(mtd-id-swap #'bar 0)
+(mtd-id-swap #'m 0)
+(mtd-id-swap #'not-a-method-id 0)
+(code:line)
+(define field-id-swap
+  (make-field-id-swap-mutator
+   #'(module test racket
+       (#%module-begin
+        (define c%
+          (class object%
+            (super-new)
+            (field [x 5]
+                   [y 42])))))))
+(field-id-swap #'x 0)
+(field-id-swap #'y 0)
+(field-id-swap #'not-x-or-y 0)
+]
+}
+
+
+
+@subsection{Mutators that inject bugs in Typed Racket types}
+@defmodule[mutate/mutators/type]
+@deftogether[(
+@defthing[#:kind "mutator" complex-type->Any    mutator/c]
+)]{
+Replaces a compound type with @racket[Any].
+
+@examples[
+(complex-type->Any #'(List Number) 0)
+(complex-type->Any #'(-> String Integer) 0)
+(complex-type->Any #'Number 0)
+]
+}
+
+@deftogether[(
+@defthing[#:kind "mutator" function-arg-swap    mutator/c]
+@defthing[#:kind "mutator" function-result-swap mutator/c]
+)]{
+Swap argument- and result-position types under an arrow type.
+Optional and mandatory argument types are only swapped within each category for @racket[->*] types.
+
+@examples[
+(function-arg-swap #'(-> A B C D) 0)
+(function-arg-swap #'(-> A B C D) 1)
+(function-arg-swap #'(-> A B C D) 2)
+
+(function-arg-swap #'(->* (A B) (C) D) 0)
+(function-arg-swap #'(->* (A B) (C) D) 1)
+
+(function-result-swap #'(-> A B C (values D E)) 0)
+]
+}
+
+@deftogether[(
+@defthing[#:kind "mutator" struct-field-swap    mutator/c]
+@defthing[#:kind "mutator" class-field-swap     mutator/c]
+)]{
+Swap struct and class field types.
+
+@examples[
+(struct-field-swap #'(struct s ([x : Integer] [y : String])) 0)
+(class-field-swap #'(init-field [x Integer] [y String]) 0)
+]
+}
+
