@@ -12,5 +12,5 @@
 (define (log-mutation before after type)
   (log-message mutate-logger
                'info
-               @~a{Mutating with @type : @before -> @after}
+               @~a{Mutating with @type : @~s[before] -> @~s[after]}
                (list type before after)))
