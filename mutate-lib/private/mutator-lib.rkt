@@ -170,7 +170,7 @@
                                  swapped
                                  maybe-atom-stx
                                  maybe-atom-stx))
-                (apply-swap-alist (syntax->datum maybe-atom-stx)
+                (apply-swap-alist maybe-atom-stx
                                   swaps
                                   mutation-index
                                   counter))))))
@@ -181,7 +181,7 @@
                           counter)
   (define mutator-sequence
     (for/list ([{orig new} (in-dict swap-alist)])
-      (make-guarded-mutator (λ (v) (equal? v orig))
+      (make-guarded-mutator (λ (v) (equal? (syntax->datum v) orig))
                             (λ (v) new))))
   (apply-mutators original-value
                   mutator-sequence
